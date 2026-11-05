@@ -1,0 +1,2733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Maruya Videoke System - SongHub Pro</title>
+
+<!-- Tailwind CSS (CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js" defer></script>
+<script>if (window.tailwind) { tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } } }; }</script>
+<!-- FontAwesome 6 -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<!-- Inter font -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+    /* ---------- Base ---------- */
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; scrollbar-width: none; -ms-overflow-style: none; }
+    *::-webkit-scrollbar { display: none; }
+    html, body { height: 100%; }
+    body { margin: 0; background: #000; font-family: 'Inter', system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-user-select: none; }
+    input { user-select: text; -webkit-user-select: text; font-family: inherit; }
+
+    /* Smooth press animation on every button */
+    button { touch-action: manipulation; cursor: pointer; transition: transform .08s ease, filter .12s ease, background-color .15s ease, opacity .15s ease; }
+    button:active:not(:disabled) { transform: scale(0.94); filter: brightness(1.15); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ---------- Glassmorphism + neon ---------- */
+    .glass { background: rgba(12, 12, 22, .55); -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%); border: 1px solid rgba(255, 255, 255, .12); }
+    .neon-amber { color: #fde68a; text-shadow: 0 0 4px rgba(253, 230, 138, .9), 0 0 12px rgba(251, 191, 36, .85), 0 0 28px rgba(245, 158, 11, .6), 0 0 48px rgba(245, 158, 11, .35); }
+    .neon-amber-dim { color: rgba(251, 191, 36, .28); text-shadow: 0 0 8px rgba(245, 158, 11, .25); }
+    .neon-cyan { color: #a5f3fc; text-shadow: 0 0 6px rgba(34, 211, 238, .8), 0 0 18px rgba(34, 211, 238, .45); }
+    .wifi-on { color: #4ade80; filter: drop-shadow(0 0 5px #22c55e) drop-shadow(0 0 12px rgba(34, 197, 94, .6)); }
+    .wifi-off { color: #f87171; opacity: .8; }
+
+    /* ---------- Karaoke lyrics ---------- */
+    #lyrics-overlay { flex-direction: column; align-items: stretch; justify-content: center; gap: clamp(10px, 2.4vh, 20px); width: 100%; padding: 18px 8px; background: rgba(0, 0, 0, .58); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, .12); border-radius: 20px; pointer-events: none; }
+    .lyric-line { display: block; width: 100%; min-height: 1.25em; text-align: center; font-weight: 900; line-height: 1.25; letter-spacing: .01em; white-space: nowrap; overflow: hidden; }
+    .syllable { position: relative; display: inline-block; white-space: pre; }
+    .syllable .base-text { color: #fff; text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 -2px 0 #000, 0 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 4px 10px rgba(0, 0, 0, .9); }
+    .syllable .fill { position: absolute; top: 0; left: 0; overflow: hidden; white-space: pre; width: 0%; color: #ffe600; text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 -2px 0 #000, 0 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000; will-change: width; }
+    .interlude-line { color: #fbbf24; font-size: 1.05rem; letter-spacing: 2px; text-transform: uppercase; text-shadow: 0 0 12px rgba(251, 191, 36, .7), 0 3px 5px #000; animation: interludePulse 1.8s ease-in-out infinite; }
+    @keyframes interludePulse { 0%, 100% { opacity: .65; transform: scale(1); } 50% { opacity: 1; transform: scale(1.035); } }
+    #overlay-countdown { position: relative; width: clamp(112px, 34vw, 154px); height: clamp(112px, 34vw, 154px); display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto; border-radius: 50%; border: 5px solid rgba(255, 215, 0, .95); background: radial-gradient(circle, rgba(20, 20, 20, .96), rgba(0, 0, 0, .78)); color: #ffe600; font-size: clamp(3.6rem, 16vw, 5.4rem); font-weight: 900; line-height: 1; text-shadow: 0 0 18px rgba(255, 215, 0, .65), 0 4px 5px #000; box-shadow: 0 0 0 8px rgba(255, 215, 0, .12), 0 0 35px rgba(255, 190, 0, .38); animation: countdownPop .55s cubic-bezier(.2, .8, .2, 1); }
+    #overlay-countdown::after { content: 'GET READY'; position: absolute; bottom: 22%; font-size: .58rem; letter-spacing: .24em; color: #fff; text-shadow: 0 2px 3px #000; }
+    #overlay-countdown.hidden { display: none !important; }
+    @keyframes countdownPop { from { transform: scale(.65); opacity: .2; } to { transform: scale(1); opacity: 1; } }
+
+    /* ---------- Boot / loading overlay ---------- */
+    #boot { position: absolute; inset: 0; z-index: 100; display: flex; flex-direction: column; justify-content: center; padding: 28px 22px calc(28px + env(safe-area-inset-bottom)); background: radial-gradient(120% 60% at 50% 0%, rgba(120, 80, 10, .35), rgba(10, 10, 20, 0) 60%), #07080f; transition: opacity .45s ease, visibility .45s; }
+    #boot.boot-out { opacity: 0; visibility: hidden; pointer-events: none; }
+    .boot-icon { width: 84px; height: 84px; border-radius: 24px; margin: 0 auto 18px; display: flex; align-items: center; justify-content: center; font-size: 36px; color: #3b1a05; background: linear-gradient(180deg, #fbbf24, #ea580c); box-shadow: 0 10px 40px rgba(245, 158, 11, .35); }
+    .boot-track { height: 9px; border-radius: 999px; background: rgba(255, 255, 255, .09); overflow: hidden; }
+    .boot-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #f59e0b, #fde047); transition: width .25s ease; }
+    .boot-track.sm { height: 7px; }
+    .boot-ico { width: 34px; height: 34px; border-radius: 999px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 13px; background: rgba(255, 255, 255, .1); color: rgba(255, 255, 255, .65); }
+    .boot-row[data-state="done"] .boot-ico { background: #065f46; color: #6ee7b7; }
+    .boot-row[data-state="warn"] .boot-ico { background: rgba(217, 119, 6, .35); color: #fcd34d; }
+    .boot-row[data-state="bad"] .boot-ico { background: rgba(185, 28, 28, .4); color: #fca5a5; }
+    .boot-row[data-state="bad"] .boot-fill { background: #ef4444; }
+    .boot-launch { width: 100%; padding: 17px 0; border-radius: 18px; font-size: 18px; font-weight: 900; letter-spacing: .22em; color: #fff; border: 2px solid #4ade80; background: linear-gradient(180deg, #3f8f2a, #1e5a14); box-shadow: 0 0 28px rgba(74, 222, 128, .25); }
+    .boot-launch:disabled { border-color: rgba(255, 255, 255, .12); background: rgba(255, 255, 255, .07); box-shadow: none; color: rgba(255, 255, 255, .35); }
+
+    /* ---------- DB Engine badge (pulsing) ---------- */
+    .db-badge { --c: #22c55e; display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #bbf7d0; background: rgba(34, 197, 94, .14); border: 1px solid rgba(34, 197, 94, .45); }
+    .db-badge[data-state="loading"] { --c: #f59e0b; color: #fde68a; background: rgba(245, 158, 11, .14); border-color: rgba(245, 158, 11, .45); }
+    .db-badge[data-state="offline"] { --c: #f97316; color: #fed7aa; background: rgba(249, 115, 22, .14); border-color: rgba(249, 115, 22, .45); }
+    .db-dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); }
+    .db-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--c); animation: dbPing 1.6s cubic-bezier(0, 0, .2, 1) infinite; }
+    @keyframes dbPing { 75%, 100% { transform: scale(2.8); opacity: 0; } }
+
+    /* ---------- Audio adjustment modules ---------- */
+    .mod { border-radius: 16px; padding: 6px; display: flex; align-items: center; justify-content: space-between; }
+    .mod-red { background: linear-gradient(180deg, rgba(239, 68, 68, .38), rgba(69, 10, 10, .6)); border: 1px solid rgba(248, 113, 113, .55); }
+    .mod-amber { background: linear-gradient(180deg, rgba(245, 158, 11, .38), rgba(69, 38, 4, .6)); border: 1px solid rgba(251, 191, 36, .55); }
+    .mod-emerald { background: linear-gradient(180deg, rgba(16, 185, 129, .38), rgba(4, 52, 36, .6)); border: 1px solid rgba(52, 211, 153, .55); }
+    .mod-btn { width: 28px; height: 28px; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; flex: 0 0 auto; }
+    .mod-red .mod-btn { background: #ef4444; }
+    .mod-amber .mod-btn { background: #d97706; }
+    .mod-emerald .mod-btn { background: #059669; }
+    .mod-label { font-size: 9px; font-weight: 800; letter-spacing: .2em; }
+    .mod-red .mod-label { color: #fecaca; }
+    .mod-amber .mod-label { color: #fde68a; }
+    .mod-emerald .mod-label { color: #a7f3d0; }
+
+    /* ---------- Playback row ---------- */
+    .pb { height: clamp(38px, 5.6dvh, 46px); border-radius: 12px; color: #fff; font-size: 1rem; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255, 255, 255, .14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 3px 6px rgba(0, 0, 0, .5); }
+    .pb-search { background: linear-gradient(180deg, #2f8ae0, #123f85); }
+    .pb-nav { background: linear-gradient(180deg, #52525b, #202026); }
+    .pb-play { background: linear-gradient(180deg, #34d399, #0f8a52); font-size: 1.15rem; }
+    .pb-stop { background: linear-gradient(180deg, #ef4444, #8a1212); }
+
+    /* ---------- Keypad ---------- */
+    .kbtn { position: relative; height: clamp(40px, 6dvh, 52px); border-radius: 12px; color: #fff; font-weight: 800; font-size: 1.25rem; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255, 255, 255, .14); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 3px 6px rgba(0, 0, 0, .55); }
+    .kbtn.sm { font-size: .72rem; letter-spacing: .04em; }
+    .k-digit { background: linear-gradient(180deg, #4a4a55 0%, #1d1d25 100%); }
+    .k-clear { background: linear-gradient(180deg, #e0426b 0%, #8a1535 100%); border-color: rgba(251, 113, 133, .5); }
+    .k-res { background: linear-gradient(180deg, #34a853 0%, #176b2e 100%); border-color: rgba(74, 222, 128, .5); }
+    .k-can { background: linear-gradient(180deg, #d9382c 0%, #7d1109 100%); border-color: rgba(248, 113, 113, .5); }
+    .k-first { background: linear-gradient(180deg, #2f7be0 0%, #12408a 100%); border-color: rgba(96, 165, 250, .5); }
+    .k-list { background: linear-gradient(180deg, #7c3aed 0%, #3f1a8a 100%); border-color: rgba(167, 139, 250, .5); }
+    .k-bgv { background: linear-gradient(180deg, #0ea5c6 0%, #075a73 100%); border-color: rgba(103, 232, 249, .5); }
+    .rsv-count { position: absolute; top: -6px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #fbbf24; color: #000; font-size: 10px; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(251, 191, 36, .8); }
+
+    /* ---------- Status feed chips ---------- */
+    .q-chip { display: inline-block; background: rgba(0, 0, 0, .6); color: #fbbf24; font-family: ui-monospace, monospace; font-weight: 800; font-size: 11px; padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, .22); }
+    .q-chip.playing { background: #dc2626; color: #fff; border-color: #fca5a5; }
+    .q-chip.label { background: transparent; border-color: transparent; color: rgba(255, 255, 255, .8); font-family: inherit; letter-spacing: .1em; }
+
+    /* ---------- Library modal ---------- */
+    .tab-btn { padding: 7px 14px; border-radius: 10px; font-size: 12px; font-weight: 800; background: rgba(255, 255, 255, .08); color: rgba(255, 255, 255, .7); border: 1px solid rgba(255, 255, 255, .1); }
+    .tab-btn.active { background: #f59e0b; color: #000; border-color: #fbbf24; }
+    .tab-btn.queue.active { background: #7c3aed; color: #fff; border-color: #a78bfa; }
+    .chip { padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 800; background: rgba(255, 255, 255, .07); color: rgba(255, 255, 255, .7); border: 1px solid rgba(255, 255, 255, .12); white-space: nowrap; }
+    .chip.active { background: rgba(251, 191, 36, .2); color: #fde68a; border-color: rgba(251, 191, 36, .7); }
+    .song-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin-bottom: 6px; border-radius: 14px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .1); }
+    .song-code { font-family: ui-monospace, monospace; font-size: 11px; font-weight: 800; color: #fbbf24; }
+    .song-title { font-size: 14px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .song-artist { font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, .55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rsv-btn { flex: 0 0 auto; padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 800; color: #000; background: linear-gradient(180deg, #fbbf24, #d97706); }
+    .rsv-btn.done { background: linear-gradient(180deg, #4ade80, #16a34a); }
+    .q-index { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; background: rgba(124, 58, 237, .5); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+    .icon-btn { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; }
+    .icon-btn.play { background: #059669; }
+    .icon-btn.del { background: #b91c1c; }
+    .empty-state { text-align: center; padding: 48px 16px; color: rgba(255, 255, 255, .5); font-size: 13px; font-weight: 600; }
+
+    /* ---------- Settings (light) ---------- */
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+    .pill[data-tone="ok"] { background: #d1fae5; color: #047857; }
+    .pill[data-tone="warn"] { background: #fef3c7; color: #b45309; }
+    .pill[data-tone="bad"] { background: #fee2e2; color: #b91c1c; }
+    .pill[data-tone="info"] { background: #e0e7ff; color: #4338ca; }
+    .info-label { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #6b7280; }
+    .info-value { font-size: 13px; font-weight: 600; color: #111827; word-break: break-all; }
+</style>
+</head>
+
+<body>
+<noscript><div style="color:#fff;padding:24px;font-family:sans-serif">Maruya Videoke System needs JavaScript enabled.</div></noscript>
+
+<!-- Mobile-device style container -->
+<div id="app" class="relative mx-auto w-full max-w-md h-[100dvh] bg-black overflow-hidden text-white shadow-2xl shadow-black">
+
+    <!-- ===================================================== -->
+    <!-- PAGE: LANDING                                          -->
+    <!-- ===================================================== -->
+    <section id="page-landing" class="absolute inset-0 bg-gradient-to-b from-[#0b0c42] via-[#11092a] to-[#1a0515]">
+        <div class="flex flex-col h-full px-4 pt-[max(14px,env(safe-area-inset-top))] pb-[max(14px,env(safe-area-inset-bottom))]">
+
+            <!-- Header: live clock + Wi-Fi + settings/help -->
+            <header class="flex items-center justify-between">
+                <div class="glass rounded-full flex items-center gap-2.5 pl-3 pr-3.5 py-1.5">
+                    <i id="wifi-icon" class="fa-solid fa-wifi wifi-on" aria-hidden="true"></i>
+                    <span id="clock" class="text-[13px] font-bold tracking-wide text-white/90">-- | --:--</span>
+                </div>
+                <button type="button" data-action="open-settings" aria-label="Settings and help" class="glass w-10 h-10 rounded-full flex items-center justify-center text-white/85">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+            </header>
+
+            <!-- Brand -->
+            <div class="text-center mt-5 mb-4">
+                <div class="text-[11px] font-extrabold tracking-[0.35em] text-pink-300/80 uppercase">SongHub Pro</div>
+                <h1 class="text-[1.9rem] leading-tight font-black neon-amber m-0">Maruya Videoke</h1>
+                <div class="text-xs font-semibold text-white/55 mt-0.5">MIDI &amp; SF2 Videoke System</div>
+            </div>
+
+            <!-- Main grid menu -->
+            <main class="flex-1 min-h-0 overflow-y-auto pb-2">
+                <div class="grid grid-cols-6 gap-3">
+
+                    <!-- Enter Karaoke (large, spans full width) -->
+                    <button type="button" data-action="enter-karaoke" class="col-span-6 relative overflow-hidden h-36 rounded-3xl p-5 text-left bg-gradient-to-br from-pink-500 via-rose-500 to-red-600 shadow-[0_10px_40px_rgba(244,63,94,.45)] border border-white/20">
+                        <i class="fa-solid fa-music absolute -right-3 -bottom-5 text-[9.5rem] text-white/20 -rotate-12" aria-hidden="true"></i>
+                        <div class="relative flex flex-col h-full justify-between">
+                            <div class="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center text-xl"><i class="fa-solid fa-microphone-lines"></i></div>
+                            <div>
+                                <div class="text-2xl font-black tracking-tight leading-none">ENTER KARAOKE</div>
+                                <div id="home-song-count" class="text-xs font-bold text-white/80 mt-1.5">Loading songs…</div>
+                            </div>
+                        </div>
+                    </button>
+
+                    <!-- Media Player -->
+                    <button type="button" data-action="media-player" class="col-span-3 h-24 rounded-2xl p-3 text-left flex flex-col justify-between bg-gradient-to-br from-indigo-500 to-blue-700 border border-white/20 shadow-lg shadow-indigo-900/40">
+                        <i class="fa-solid fa-circle-play text-3xl"></i>
+                        <span class="text-[13px] font-extrabold leading-none">Media Player</span>
+                    </button>
+
+                    <!-- Sync DB -->
+                    <button type="button" data-action="sync-db" class="col-span-3 h-24 rounded-2xl p-3 text-left flex flex-col justify-between bg-gradient-to-br from-emerald-500 to-teal-700 border border-white/20 shadow-lg shadow-emerald-900/40">
+                        <i id="sync-icon" class="fa-solid fa-rotate text-3xl"></i>
+                        <span class="text-[13px] font-extrabold leading-none">Sync DB</span>
+                    </button>
+
+                    <!-- Song Search -->
+                    <button type="button" data-action="song-search" class="col-span-2 h-24 rounded-2xl p-3 text-left flex flex-col justify-between bg-gradient-to-br from-amber-400 to-orange-600 border border-white/20 shadow-lg shadow-orange-900/40">
+                        <i class="fa-solid fa-magnifying-glass text-2xl"></i>
+                        <span class="text-[12px] font-extrabold leading-tight">Song<br>Search</span>
+                    </button>
+
+                    <!-- Artist Search -->
+                    <button type="button" data-action="artist-search" class="col-span-2 h-24 rounded-2xl p-3 text-left flex flex-col justify-between bg-gradient-to-br from-fuchsia-500 to-purple-700 border border-white/20 shadow-lg shadow-purple-900/40">
+                        <i class="fa-solid fa-user-astronaut text-2xl"></i>
+                        <span class="text-[12px] font-extrabold leading-tight">Artist<br>Search</span>
+                    </button>
+
+                    <!-- New Songs -->
+                    <button type="button" data-action="new-songs" class="col-span-2 h-24 rounded-2xl p-3 text-left flex flex-col justify-between bg-gradient-to-br from-cyan-400 to-sky-600 border border-white/20 shadow-lg shadow-sky-900/40">
+                        <i class="fa-solid fa-wand-magic-sparkles text-2xl"></i>
+                        <span class="text-[12px] font-extrabold leading-tight">New<br>Songs</span>
+                    </button>
+                </div>
+            </main>
+
+            <!-- Footer -->
+            <footer class="pt-2 flex items-center justify-center gap-3 text-[11px] font-semibold text-white/40">
+                <span id="home-db-chip" class="db-badge" data-state="loading"><span class="db-dot"></span>DB Engine</span>
+                <span>SongHub Pro v1.0</span>
+            </footer>
+        </div>
+    </section>
+
+    <!-- ===================================================== -->
+    <!-- PAGE: PLAYER & KEYPAD                                  -->
+    <!-- ===================================================== -->
+    <section id="page-player" class="hidden absolute inset-0 bg-black">
+        <div class="relative isolate h-full flex flex-col overflow-hidden">
+
+            <!-- Visual engine · Layer 1: particle canvas -->
+            <canvas id="particle-canvas" class="absolute inset-0 w-full h-full z-0 bg-gradient-to-b from-[#0b0c42] via-[#11092a] to-[#1a0515]"></canvas>
+            <!-- Visual engine · Layer 2: looping BGV (src is set from BGV_LIST[0] in JS) -->
+            <video id="bgv-video" class="absolute inset-0 w-full h-full object-cover z-[1]" style="mix-blend-mode:screen;opacity:.85" muted loop playsinline preload="metadata"></video>
+            <!-- Readability vignette -->
+            <div class="absolute inset-0 z-[2] pointer-events-none bg-gradient-to-b from-black/55 via-transparent to-black/75"></div>
+
+            <!-- Top bar: back · 6-digit code display · settings -->
+            <div id="player-topbar" class="relative z-10 flex items-center gap-2 px-3 pt-[max(10px,env(safe-area-inset-top))]">
+                <button type="button" data-action="back" aria-label="Back to menu" class="glass w-10 h-10 rounded-full flex items-center justify-center shrink-0"><i class="fa-solid fa-chevron-left"></i></button>
+                <div class="glass flex-1 rounded-2xl px-3 py-1.5 text-center min-w-0">
+                    <div id="code-display" class="text-[2.1rem] leading-none font-black tracking-[0.16em] tabular-nums" aria-live="polite" aria-label="Song code">000000</div>
+                    <div id="code-match" class="text-[11px] font-bold neon-cyan truncate min-h-[15px] mt-1"></div>
+                </div>
+                <button type="button" data-action="open-settings" aria-label="Settings" class="glass w-10 h-10 rounded-full flex items-center justify-center shrink-0"><i class="fa-solid fa-gear"></i></button>
+            </div>
+
+            <!-- Status feed (center) -->
+            <div class="relative z-10 flex-1 min-h-0 flex items-center justify-center px-5">
+                <div id="stage-lyrics" class="hidden w-full flex flex-col items-center gap-3">
+                    <div class="absolute top-3 inset-x-0 px-5 flex flex-col items-center gap-1.5 pointer-events-none">
+                        <div id="lyrics-queue" class="flex flex-wrap items-center justify-center gap-1"></div>
+                        <div id="typed-code" class="hidden glass rounded-full px-4 py-1 text-sm font-black tracking-[.18em] text-amber-300 max-w-full truncate"></div>
+                    </div>
+                    <div id="overlay-countdown" class="hidden" aria-live="assertive" aria-label="Song countdown"></div>
+                    <div id="lyrics-overlay" style="display:none"><div id="lyric-line-1" class="lyric-line"></div><div id="lyric-line-2" class="lyric-line"></div></div>
+                    <div id="overlay-paused" class="hidden bg-red-600/95 border border-white/40 text-white font-black text-xs tracking-widest px-4 py-1 rounded-full shadow-xl uppercase">PAUSED</div>
+                </div>
+                <div id="status-card" class="glass rounded-3xl px-5 py-4 w-full max-w-[340px] text-center">
+                    <div class="flex justify-center mb-2">
+                        <span id="db-badge" class="db-badge" data-state="loading"><span class="db-dot"></span>DB Engine <span id="db-badge-count">…</span></span>
+                    </div>
+                    <div id="status-kicker" class="text-[10px] font-extrabold tracking-[0.3em] text-amber-300/80 uppercase">System Status</div>
+                    <div id="status-title" class="text-xl font-black leading-snug mt-1 break-words">LOADING…</div>
+                    <div id="status-sub" class="text-xs font-semibold text-white/70 mt-1 break-words"></div>
+                    <div id="status-meta" class="text-[10px] font-bold text-cyan-300/80 mt-1.5 tracking-wide"></div>
+                    <div id="status-queue" class="mt-2.5 flex flex-wrap items-center justify-center gap-1"></div>
+                </div>
+            </div>
+
+            <!-- Dashboard & controls (glass bottom panel) -->
+            <div class="relative z-10 glass rounded-t-3xl border-b-0 px-2.5 pt-2.5 pb-[max(10px,env(safe-area-inset-bottom))] flex flex-col gap-2">
+
+                <!-- Audio adjustments: KEY / TEMPO / MELODY -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="mod mod-red">
+                        <button type="button" data-action="adj" data-target="key" data-step="-1" class="mod-btn" aria-label="Key down"><i class="fa-solid fa-minus"></i></button>
+                        <div class="text-center leading-none"><div class="mod-label">KEY</div><div id="val-key" class="text-[15px] font-black text-white mt-1">0</div></div>
+                        <button type="button" data-action="adj" data-target="key" data-step="1" class="mod-btn" aria-label="Key up"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <div class="mod mod-amber">
+                        <button type="button" data-action="adj" data-target="tempo" data-step="-1" class="mod-btn" aria-label="Tempo down"><i class="fa-solid fa-minus"></i></button>
+                        <div class="text-center leading-none"><div class="mod-label">TEMPO</div><div id="val-tempo" class="text-[15px] font-black text-white mt-1">100%</div></div>
+                        <button type="button" data-action="adj" data-target="tempo" data-step="1" class="mod-btn" aria-label="Tempo up"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <div class="mod mod-emerald">
+                        <button type="button" data-action="adj" data-target="melody" data-step="-1" class="mod-btn" aria-label="Melody down"><i class="fa-solid fa-minus"></i></button>
+                        <div class="text-center leading-none"><div class="mod-label">MELODY</div><div id="val-melody" class="text-[15px] font-black text-white mt-1">40</div></div>
+                        <button type="button" data-action="adj" data-target="melody" data-step="1" class="mod-btn" aria-label="Melody up"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                </div>
+
+                <!-- Playback row: Search, Prev, Play, Next, Stop -->
+                <div class="grid grid-cols-5 gap-2">
+                    <button type="button" data-action="search" aria-label="Search songs" class="pb pb-search"><i class="fa-solid fa-magnifying-glass"></i></button>
+                    <button type="button" data-action="prev" aria-label="Restart song" class="pb pb-nav"><i class="fa-solid fa-backward-step"></i></button>
+                    <button type="button" data-action="play" aria-label="Play or pause" class="pb pb-play"><i id="play-icon" class="fa-solid fa-play"></i></button>
+                    <button type="button" data-action="next" aria-label="Next song" class="pb pb-nav"><i class="fa-solid fa-forward-step"></i></button>
+                    <button type="button" data-action="stop" aria-label="Stop" class="pb pb-stop"><i class="fa-solid fa-stop"></i></button>
+                </div>
+
+                <!-- Numeric keypad: 4 columns x 4 rows (0-9 + 6 commands) -->
+                <div id="keypad" class="grid grid-cols-4 gap-2">
+                    <button type="button" data-action="digit" data-value="1" class="kbtn k-digit">1</button>
+                    <button type="button" data-action="digit" data-value="2" class="kbtn k-digit">2</button>
+                    <button type="button" data-action="digit" data-value="3" class="kbtn k-digit">3</button>
+                    <button type="button" data-action="clear" class="kbtn sm k-clear">CLEAR</button>
+
+                    <button type="button" data-action="digit" data-value="4" class="kbtn k-digit">4</button>
+                    <button type="button" data-action="digit" data-value="5" class="kbtn k-digit">5</button>
+                    <button type="button" data-action="digit" data-value="6" class="kbtn k-digit">6</button>
+                    <button type="button" data-action="rsv-list" class="kbtn sm k-list">RSV List<span id="rsv-badge" class="rsv-count hidden">0</span></button>
+
+                    <button type="button" data-action="digit" data-value="7" class="kbtn k-digit">7</button>
+                    <button type="button" data-action="digit" data-value="8" class="kbtn k-digit">8</button>
+                    <button type="button" data-action="digit" data-value="9" class="kbtn k-digit">9</button>
+                    <button type="button" data-action="bgv" class="kbtn sm k-bgv"><i class="fa-solid fa-film mr-1.5"></i>BGV</button>
+
+                    <button type="button" data-action="res" class="kbtn sm k-res text-[0.85rem]">RES</button>
+                    <button type="button" data-action="digit" data-value="0" class="kbtn k-digit">0</button>
+                    <button type="button" data-action="can" class="kbtn sm k-can text-[0.85rem]">CAN</button>
+                    <button type="button" data-action="first-rsv" class="kbtn sm k-first">1st RSV</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================================================== -->
+    <!-- PAGE: SETTINGS (light mode)                            -->
+    <!-- ===================================================== -->
+    <section id="page-settings" class="hidden absolute inset-0 bg-gray-50 text-gray-900 overflow-y-auto">
+        <div class="min-h-full flex flex-col">
+            <header class="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b border-gray-200 px-4 pt-[max(12px,env(safe-area-inset-top))] pb-3 flex items-center gap-3">
+                <button type="button" data-action="settings-back" aria-label="Back" class="w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-700"><i class="fa-solid fa-chevron-left"></i></button>
+                <div>
+                    <h2 class="text-lg font-black leading-tight m-0">Settings</h2>
+                    <div class="text-[11px] font-semibold text-gray-500">Maruya Videoke System &bull; SongHub Pro</div>
+                </div>
+            </header>
+
+            <div class="flex-1 px-4 py-4 flex flex-col gap-4 pb-[max(24px,env(safe-area-inset-bottom))]">
+
+                <!-- DB Index -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-extrabold flex items-center gap-2 m-0"><i class="fa-solid fa-database text-emerald-600"></i>DB Index</h3>
+                        <span id="set-db-status" class="pill" data-tone="info">Loading</span>
+                    </div>
+                    <div class="flex flex-col gap-2.5">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><div class="info-label">Songs</div><div id="set-db-count" class="info-value">0</div></div>
+                        </div>
+                        <div><div class="info-label">Last sync</div><div id="set-db-synced" class="info-value">Never</div></div>
+                        <div id="set-db-error-wrap" class="hidden"><div class="info-label">Notes</div><div id="set-db-error" class="info-value text-amber-700"></div></div>
+                    </div>
+                    <button type="button" data-action="sync-db" class="mt-3 w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-extrabold"><i class="fa-solid fa-rotate mr-2"></i>Sync now</button>
+                </div>
+
+                <!-- Soundfont -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-extrabold flex items-center gap-2 m-0"><i class="fa-solid fa-sliders text-violet-600"></i>Soundfont</h3>
+                        <span id="set-sf-status" class="pill" data-tone="info">Checking</span>
+                    </div>
+                    <button type="button" data-action="recheck-sf" class="mt-3 w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-extrabold"><i class="fa-solid fa-magnifying-glass mr-2"></i>Re-check soundfont</button>
+                </div>
+
+                <!-- Preferences -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                    <h3 class="text-sm font-extrabold flex items-center gap-2 mb-3 m-0"><i class="fa-solid fa-volume-high text-amber-600"></i>Audio feedback</h3>
+                    <label class="flex items-center justify-between py-2 cursor-pointer">
+                        <span><span class="block text-sm font-bold">Voice prompts</span><span class="block text-xs text-gray-500">Speak digits 0-9 when keys are pressed</span></span>
+                        <span class="relative inline-flex items-center">
+                            <input id="opt-voice" type="checkbox" class="sr-only peer">
+                            <span class="w-11 h-6 bg-gray-300 rounded-full peer-checked:bg-emerald-500 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:shadow after:transition-transform peer-checked:after:translate-x-5"></span>
+                        </span>
+                    </label>
+                    <label class="flex items-center justify-between py-2 cursor-pointer border-t border-gray-100">
+                        <span><span class="block text-sm font-bold">Beep tones</span><span class="block text-xs text-gray-500">Short tone on commands and reservations</span></span>
+                        <span class="relative inline-flex items-center">
+                            <input id="opt-beep" type="checkbox" class="sr-only peer">
+                            <span class="w-11 h-6 bg-gray-300 rounded-full peer-checked:bg-emerald-500 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:shadow after:transition-transform peer-checked:after:translate-x-5"></span>
+                        </span>
+                    </label>
+                </div>
+
+                <!-- Sound engine -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                    <h3 class="text-sm font-extrabold flex items-center gap-2 mb-2 m-0"><i class="fa-solid fa-sliders text-rose-500"></i>Sound engine</h3>
+                    <div class="flex items-center justify-between py-2">
+                        <span><span class="block text-sm font-bold">Volume leveling</span><span class="block text-xs text-gray-500">Evens out loud and quiet songs</span></span>
+                        <button type="button" id="btn-norm" data-action="toggle-norm" class="px-4 py-1.5 rounded-lg text-xs font-extrabold bg-emerald-600 text-white">ON</button>
+                    </div>
+                    <div class="flex items-center justify-between py-2 border-t border-gray-100">
+                        <span><span class="block text-sm font-bold">Bass boost</span><span class="block text-xs text-gray-500">Tap to cycle the level</span></span>
+                        <button type="button" id="btn-bass" data-action="cycle-bass" class="px-4 py-1.5 rounded-lg text-xs font-extrabold bg-violet-600 text-white">OFF</button>
+                    </div>
+                    <div class="flex items-center justify-between py-2 border-t border-gray-100">
+                        <span><span class="block text-sm font-bold">Lyric timing</span><span class="block text-xs text-gray-500">Minus shows lyrics earlier</span></span>
+                        <span class="flex items-center gap-2">
+                            <button type="button" data-action="lyr" data-step="-1" class="w-8 h-8 rounded-lg bg-gray-200 font-black" aria-label="Lyrics earlier">-</button>
+                            <span id="val-lyr" class="text-xs font-extrabold w-14 text-center">0 ms</span>
+                            <button type="button" data-action="lyr" data-step="1" class="w-8 h-8 rounded-lg bg-gray-200 font-black" aria-label="Lyrics later">+</button>
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between py-2 border-t border-gray-100">
+                        <span><span class="block text-sm font-bold">Remote pairing</span><span class="block text-xs text-gray-500">Enter this code on the remote</span></span>
+                        <span class="text-right"><span id="remote-room-code" class="block font-mono text-sm font-black tracking-[.2em]">------</span><a href="remote.html" target="_blank" rel="noopener" class="text-[11px] font-extrabold text-violet-600 underline">Open remote</a></span>
+                    </div>
+                </div>
+
+                <!-- Quick help -->
+                <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                    <h3 class="text-sm font-extrabold flex items-center gap-2 mb-2 m-0"><i class="fa-solid fa-circle-question text-rose-600"></i>Quick help</h3>
+                    <ul class="text-[13px] text-gray-700 leading-relaxed list-disc pl-5 m-0 space-y-1">
+                        <li>Type a song code, then press <b>RES</b> to reserve it.</li>
+                        <li><b>1st RSV</b> puts the song at the front of the queue.</li>
+                        <li><b>CAN</b> deletes the last digit; with no digits it cancels the last reservation.</li>
+                        <li><b>CLEAR</b> wipes the typed code. <b>BGV</b> switches the background video.</li>
+                        <li><b>RSV List</b> shows the reserved queue.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================================================== -->
+    <!-- MODAL: SONG LIBRARY / RSV QUEUE                        -->
+    <!-- ===================================================== -->
+    <div id="library-modal" class="hidden absolute inset-0 z-50 bg-black/85 backdrop-blur-xl" role="dialog" aria-modal="true" aria-label="Song library">
+        <div class="flex flex-col h-full px-3.5 pt-[max(12px,env(safe-area-inset-top))] pb-[max(12px,env(safe-area-inset-bottom))]">
+            <div class="flex items-start justify-between mb-3">
+                <div>
+                    <h2 id="library-title" class="text-lg font-black text-amber-400 leading-tight m-0">Song Library</h2>
+                    <span id="library-count" class="text-[11px] text-gray-400 font-mono">0 songs</span>
+                </div>
+                <button type="button" data-action="close-library" aria-label="Close" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="flex gap-2 mb-3">
+                <button type="button" id="tab-library" data-action="tab-library" class="tab-btn active">Songs</button>
+                <button type="button" id="tab-queue" data-action="tab-queue" class="tab-btn queue ml-auto">RSV Queue (<span id="modal-q-badge">0</span>)</button>
+            </div>
+
+            <div id="library-controls">
+                <div class="relative mb-2.5">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 text-sm pointer-events-none"></i>
+                    <input id="library-search" type="search" inputmode="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Search title, artist, or code…" class="w-full bg-white/10 border border-white/20 rounded-xl pl-9 pr-9 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:border-amber-400">
+                    <button type="button" id="library-clear" data-action="clear-search" aria-label="Clear search" class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white/15 text-xs"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="flex gap-1.5 mb-3 overflow-x-auto">
+                    <button type="button" class="chip active" data-action="mode" data-mode="all">All</button>
+                    <button type="button" class="chip" data-action="mode" data-mode="title">Title</button>
+                    <button type="button" class="chip" data-action="mode" data-mode="artist">Artist</button>
+                    <button type="button" class="chip" data-action="mode" data-mode="code">Code</button>
+                    <button type="button" class="chip" data-action="mode" data-mode="new">New</button>
+                </div>
+            </div>
+
+            <div id="library-list" class="flex-1 min-h-0 overflow-y-auto"></div>
+            <div id="library-footer" class="pt-2 text-center text-[11px] font-semibold text-white/45"></div>
+        </div>
+    </div>
+
+    <!-- Boot / loading overlay -->
+    <div id="boot" role="dialog" aria-label="Loading">
+        <div class="boot-icon"><i class="fa-solid fa-microphone-lines"></i></div>
+        <h1 class="m-0 text-center text-[34px] leading-tight font-black tracking-tight">Maruya Videoke</h1>
+        <div class="mt-2 text-center text-[13px] font-extrabold tracking-[.32em] text-amber-300">MIDI &amp; SF2 ENGINE</div>
+
+        <div class="mt-9 flex items-baseline justify-between">
+            <span id="boot-label" class="text-[15px] font-bold text-white/90">Preparing…</span>
+            <span id="boot-pct" class="text-[15px] font-extrabold text-white/90">0%</span>
+        </div>
+        <div class="boot-track mt-2"><div id="boot-fill" class="boot-fill"></div></div>
+
+        <div class="mt-6 flex flex-col gap-5">
+            <div class="boot-row flex items-start gap-3" id="boot-row-song" data-state="pending">
+                <div class="boot-ico"><i class="fa-solid fa-spinner fa-spin"></i></div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-baseline justify-between gap-3"><span class="text-[15px] font-extrabold">Song library</span><span id="boot-song-text" class="text-[13px] font-semibold text-white/55 text-right">Loading…</span></div>
+                    <div class="boot-track sm mt-2"><div id="boot-song-fill" class="boot-fill"></div></div>
+                </div>
+            </div>
+            <div class="boot-row flex items-start gap-3" id="boot-row-sf" data-state="pending">
+                <div class="boot-ico"><i class="fa-solid fa-spinner fa-spin"></i></div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-baseline justify-between gap-3"><span class="text-[15px] font-extrabold">SoundFont (SF2)</span><span id="boot-sf-text" class="text-[13px] font-semibold text-white/55 text-right">Waiting…</span></div>
+                    <div class="boot-track sm mt-2"><div id="boot-sf-fill" class="boot-fill"></div></div>
+                </div>
+            </div>
+            <div class="boot-row flex items-start gap-3" id="boot-row-synth" data-state="pending">
+                <div class="boot-ico"><i class="fa-solid fa-spinner fa-spin"></i></div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-baseline justify-between gap-3"><span class="text-[15px] font-extrabold">Synth engine</span><span id="boot-synth-text" class="text-[13px] font-semibold text-white/55 text-right">Waiting…</span></div>
+                    <div class="boot-track sm mt-2"><div id="boot-synth-fill" class="boot-fill"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <button id="boot-launch" type="button" class="boot-launch mt-9" disabled><i class="fa-solid fa-play mr-3"></i>LAUNCH</button>
+        <div id="boot-hint" class="mt-4 text-center text-[14px] font-semibold text-white/50">Loading, please wait…</div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-24 z-[60] max-w-[85%] glass rounded-full px-4 py-2 text-xs font-bold text-white opacity-0 transition-opacity duration-200" role="status"></div>
+</div>
+
+<script>
+// ============================================================================
+// CONFIGURATION: live backend assets
+// ============================================================================
+const REMOTE_BASE = "https://maruyatvph.com/megaoke/raw/"; // MIDI library + voice prompts
+// Primary index is the 47,997-entry JSON catalog. The older endpoints remain fallbacks.
+const SONG_LIBRARY_URL = "https://maruyatvph.com/songs.json";
+const SONG_LIBRARY_FALLBACK_URL = "https://maruyatvph.com/megaoke/api/";
+const SONG_LIBRARY_SOURCES = [
+    // Same-origin PHP endpoint reads the Hostinger MySQL songs table securely.
+    { url: new URL('songs-api.php', window.location.href).href, label: 'MySQL Song Library' },
+    { url: SONG_LIBRARY_URL, label: 'songs.json fallback' },
+    { url: SONG_LIBRARY_FALLBACK_URL, label: 'Legacy Song API' },
+    { url: REMOTE_BASE, label: 'Remote MIDI directory' }
+];
+const SONG_CACHE_DB = 'maruya-videoke-cache';
+const SONG_CACHE_STORE = 'catalog';
+const SONG_CACHE_KEY = 'songs-v1';
+const SOUNDFONT_FILE = "sound/soundfont.sf2";
+const BGV_LIST = [
+    "https://maruyatvph.com/megaoke/bgv/Motion/motion1.mp4",
+    "https://maruyatvph.com/megaoke/bgv/Motion/motion2.mp4",
+    "https://maruyatvph.com/megaoke/bgv/Motion/motion3.mp4",
+    "https://maruyatvph.com/megaoke/bgv/Motion/motion4.mp4"
+];
+
+// Live-server copy of the soundfont. Only used by the Settings status check when
+// sound/soundfont.sf2 is not found next to index.html (e.g. when testing locally).
+const SOUNDFONT_REMOTE_FALLBACK = "https://maruyatvph.com/megaoke/" + SOUNDFONT_FILE;
+
+// ----------------------------------------------------------------------------
+// Tunables
+// ----------------------------------------------------------------------------
+const CODE_LENGTH = 6;          // song codes are 6 digits
+const MAX_RENDER = 100;         // DOM performance cap for the library list
+const FETCH_TIMEOUT_MS = 30000; // network timeout for the song index
+const PREFS_KEY = 'maruya.videoke.prefs.v1';
+
+// ----------------------------------------------------------------------------
+// Fallback mock database (used only when every live source fails)
+// ----------------------------------------------------------------------------
+const MOCK_SONGS = [
+    { code: '000001', name: 'My Way', artistName: 'Frank Sinatra', url: '' },
+    { code: '000002', name: 'Bohemian Rhapsody', artistName: 'Queen', url: '' },
+    { code: '000003', name: 'Sweet Caroline', artistName: 'Neil Diamond', url: '' },
+    { code: '000004', name: "Don't Stop Believin'", artistName: 'Journey', url: '' },
+    { code: '000005', name: 'I Will Always Love You', artistName: 'Whitney Houston', url: '' }
+];
+
+// ============================================================================
+// APPLICATION STATE
+// ============================================================================
+let songDatabase = [];          // sorted by code (ascending)
+let songsNewestFirst = [];      // same songs, highest code first ("New Songs")
+let songMap = new Map();        // code -> song, for O(1) lookups
+let reservedQueue = [];         // upcoming songs (current song is not in here)
+let currentCode = '';           // digits typed on the keypad (max 6)
+const audioState = { key: 0, tempo: 0, melody: 40 }; // key/tempo in steps, melody 0-100
+
+const dbState = { status: 'loading', sourceLabel: '-', url: SONG_LIBRARY_FALLBACK_URL, count: 0, syncedAt: null, error: '' };
+const sfState = { status: 'checking', url: '', size: '', source: '', tried: [] };
+const prefs = { voice: true, beep: true };
+
+const player = { state: 'idle', current: null, elapsedMs: 0, lastTick: 0, timer: null }; // idle | playing | paused
+
+const AUDIO_LIMITS = { key: { min: -6, max: 6 }, tempo: { min: -6, max: 6 }, melody: { min: 0, max: 100, stepSize: 10 } };
+
+let currentPage = 'landing';
+let prevPage = 'landing';
+let bgvIndex = 0;
+let dbLoading = false;
+let libraryView = 'library';    // library | queue
+let libraryMode = 'all';        // all | title | artist | code | new
+let searchTimer = null;
+let statusOverride = null;      // { title, sub } transient message
+let statusTimer = null;
+let toastTimer = null;
+let voicePreloaded = false;
+
+const $ = (id) => document.getElementById(id);
+const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ESC_MAP[c]);
+const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+
+// ============================================================================
+// PREFERENCES (localStorage, guarded: may be unavailable in private modes)
+// ============================================================================
+function loadPrefs() {
+    try {
+        const raw = localStorage.getItem(PREFS_KEY);
+        if (raw) Object.assign(prefs, JSON.parse(raw));
+    } catch (e) { /* storage unavailable: keep defaults */ }
+}
+function savePrefs() {
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
+}
+
+// ============================================================================
+// SYSTEM AUDIO FEEDBACK (Web Audio beeps + remote voice prompts)
+// ============================================================================
+let audioCtx = null;
+
+/** Lazily creates the AudioContext (must happen after a user gesture). */
+function getAudioCtx() {
+    if (soundEngine.ctx) { if (soundEngine.ctx.state === 'suspended') soundEngine.ctx.resume().catch(() => {}); return soundEngine.ctx; }
+    if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        try { audioCtx = new Ctx(); } catch (e) { return null; }
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    return audioCtx;
+}
+
+const BEEP_PATTERNS = {
+    tap:     [{ f: 880, d: 0.06 }],
+    reserve: [{ f: 784, d: 0.07 }, { f: 1175, d: 0.11 }],
+    error:   [{ f: 220, d: 0.09 }, { f: 165, d: 0.13 }]
+};
+
+/** Generic synthetic oscillator beep, a placeholder for command feedback. */
+function beep(kind = 'tap') {
+    if (!prefs.beep) return;
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    let t = ctx.currentTime + 0.005;
+    for (const { f, d } of (BEEP_PATTERNS[kind] || BEEP_PATTERNS.tap)) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.18, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + d + 0.02);
+        t += d * 0.9;
+    }
+}
+
+const voiceCache = {};
+
+/** Voice prompt URL for a digit, always built from REMOTE_BASE. */
+const voiceUrl = (n) => REMOTE_BASE + 'num_' + n + '.mp3';
+
+/** Warms the browser cache so key presses speak with no delay. */
+function preloadVoicePrompts() {
+    if (voicePreloaded) return;
+    voicePreloaded = true;
+    for (let n = 0; n <= 9; n++) {
+        const a = new Audio(voiceUrl(n));
+        a.preload = 'auto';
+        voiceCache[n] = a;
+    }
+}
+
+/** Plays num_<n>.mp3 from the remote server; falls back to a beep if it can't play. */
+function playVoicePrompt(n) {
+    if (!prefs.voice) { beep('tap'); return; }
+    let a = voiceCache[n];
+    if (!a) { a = new Audio(voiceUrl(n)); voiceCache[n] = a; }
+    try { a.currentTime = 0; } catch (e) { /* not seekable yet */ }
+    const p = a.play();
+    if (p && typeof p.catch === 'function') p.catch(() => beep('tap'));
+}
+
+// ============================================================================
+// SONG DATA: parsing helpers (JSON, delimited text, HTML directory listings)
+// ============================================================================
+const MIDI_EXT = /\.(mid|midi|kar|raw|bin|dat)$/i;
+
+function resolveUrl(href, base) {
+    try { return new URL(href, base).href; } catch (e) { return ''; }
+}
+
+/** "000001 - Title - Artist" -> { code, name, artistName } */
+function parseLabel(label) {
+    const parts = String(label).split(' - ').map((s) => s.trim());
+    if (/^\d{1,6}$/.test(parts[0]) && parts.length >= 2 && parts[1]) {
+        return { code: parts[0], name: parts[1], artistName: parts.slice(2).join(' - ') || 'Unknown Artist' };
+    }
+    return null;
+}
+
+/** Builds a song from a file link such as "000001 - Title - Artist.mid". */
+function songFromFilename(href, baseUrl) {
+    const url = resolveUrl(href, baseUrl);
+    if (!url) return null;
+    let file = url.split('#')[0].split('?')[0].split('/').pop();
+    if (!file) return null;
+    try { file = decodeURIComponent(file); } catch (e) { /* keep encoded */ }
+    const hasExt = MIDI_EXT.test(file);
+    const stem = file.replace(MIDI_EXT, '');
+    const parsed = parseLabel(stem);
+    if (!hasExt && !parsed) return null; // not a song file (parent dir, sort links, ...)
+    return {
+        code: parsed ? parsed.code : '',
+        name: parsed ? parsed.name : stem,
+        artistName: parsed ? parsed.artistName : 'Unknown Artist',
+        url: hasExt ? url : ''
+    };
+}
+
+/** Normalizes one JSON entry (string or object) into a raw song. */
+function normalizeSong(item, index, baseUrl = SONG_LIBRARY_URL) {
+    if (typeof item === 'string') {
+        const label = parseLabel(item.replace(MIDI_EXT, ''));
+        if (label) return { ...label, url: MIDI_EXT.test(item) ? resolveUrl(item, baseUrl) : '' };
+        return songFromFilename(item, baseUrl);
+    }
+    if (!item || typeof item !== 'object') return null;
+    const rawUrl = item.url || item.midi_url || item.midiUrl || item.file || item.filename || item.file_name || item.path || '';
+    const fromFile = rawUrl ? songFromFilename(String(rawUrl), baseUrl) : null;
+    const rawCode = item.code ?? item.id ?? item.number ?? (fromFile && fromFile.code);
+    return {
+        code: rawCode != null && String(rawCode).trim() !== '' ? rawCode : String(index + 1),
+        name: item.name || item.title || item.song || (fromFile && fromFile.name) || 'Untitled',
+        artistName: item.artistName || item.artist_name || item.artist || item.singer || (fromFile && fromFile.artistName) || 'Unknown Artist',
+        url: rawUrl ? resolveUrl(String(rawUrl), baseUrl) : ''
+    };
+}
+
+/** Parses plain-text responses: HTML listings, delimited rows, or "code - title - artist" lines. */
+function parseSongText(text, baseUrl) {
+    const out = [];
+    if (/<a\s[^>]*href/i.test(text)) { // HTML directory listing
+        for (const m of text.matchAll(/href\s*=\s*["']([^"']+)["']/gi)) {
+            const s = songFromFilename(m[1], baseUrl);
+            if (s) out.push(s);
+        }
+        return out;
+    }
+    text.split(/\r?\n/).forEach((raw) => {
+        const line = raw.trim();
+        if (!line || line.startsWith('#')) return;
+        // Delimited rows: code | title | artist | file   (tab, pipe, semicolon, or comma)
+        const delim = line.includes('\t') ? '\t' : line.includes('|') ? '|' : line.includes(';') ? ';' : (line.split(',').length >= 3 ? ',' : null);
+        if (delim) {
+            const f = line.split(delim).map((x) => x.trim().replace(/^"|"$/g, ''));
+            if (/^\d{1,6}$/.test(f[0]) && f.length >= 2) { // header rows are skipped (non-numeric first cell)
+                out.push({ code: f[0], name: f[1], artistName: f[2] || 'Unknown Artist', url: f[3] ? resolveUrl(f[3], REMOTE_BASE) : '' });
+                return;
+            }
+        }
+        const label = parseLabel(line.replace(MIDI_EXT, ''));
+        if (label) { out.push({ ...label, url: MIDI_EXT.test(line) ? resolveUrl(line, REMOTE_BASE) : '' }); return; }
+        if (MIDI_EXT.test(line)) { const s = songFromFilename(line, baseUrl); if (s) out.push(s); }
+    });
+    return out;
+}
+
+/** Accepts JSON (array, {songs|files|data|items: []}, or {code: {...}}) or text. */
+function parseSongPayload(text, baseUrl) {
+    let data = null;
+    try { data = JSON.parse(text.replace(/^\uFEFF/, '').trim()); } catch (e) { /* not JSON: try text formats */ }
+    if (data !== null && typeof data === 'object') {
+        // Support common PHP API wrappers: {songs:[]}, {data:{songs:[]}},
+        // {data:[]}, {items:[]}, and associative code => song records.
+        let node = data;
+        for (let depth = 0; depth < 4 && node && !Array.isArray(node); depth++) {
+            if (Array.isArray(node.songs)) { node = node.songs; break; }
+            if (Array.isArray(node.items)) { node = node.items; break; }
+            if (Array.isArray(node.files)) { node = node.files; break; }
+            if (Array.isArray(node.data)) { node = node.data; break; }
+            if (node.data && typeof node.data === 'object') { node = node.data; continue; }
+            if (node.result && typeof node.result === 'object') { node = node.result; continue; }
+            break;
+        }
+        let arr;
+        if (Array.isArray(node)) arr = node;
+        else if (node && typeof node === 'object') {
+            arr = Object.entries(node).map(([k, v]) =>
+                v && typeof v === 'object' ? { code: k, ...v } : { code: k, name: String(v) }
+            );
+        } else arr = [];
+        return arr.map((item, i) => normalizeSong(item, i, baseUrl)).filter(Boolean);
+    }
+    return parseSongText(text, baseUrl);
+}
+
+/** De-duplicates by code, pads codes to 6 digits, precomputes search keys, sorts. */
+function finalizeSongs(list) {
+    const byCode = new Map();
+    list.forEach((s, i) => {
+        let code = String(s.code ?? '').replace(/\D/g, '');
+        if (!code) code = String(i + 1);
+        code = code.padStart(CODE_LENGTH, '0');
+        if (byCode.has(code)) return;
+        const name = String(s.name || 'Untitled').trim();
+        const artistName = String(s.artistName || 'Unknown Artist').trim();
+        byCode.set(code, {
+            code, name, artistName, url: s.url || '',
+            nameLower: name.toLowerCase(),
+            artistLower: artistName.toLowerCase(),
+            key: `${code} ${name} ${artistName}`.toLowerCase()
+        });
+    });
+    return Array.from(byCode.values()).sort((a, b) => a.code.localeCompare(b.code));
+}
+
+function setSongs(list) {
+    songDatabase = list;
+    songsNewestFirst = list.slice().sort((a, b) => b.code.localeCompare(a.code));
+    songMap = new Map(list.map((s) => [s.code, s]));
+}
+
+const findSong = (code) => songMap.get(String(code).padStart(CODE_LENGTH, '0')) || null;
+
+// ============================================================================
+// SONG DATABASE LOADING
+// ============================================================================
+async function fetchWithTimeout(url, ms) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    try { return await fetch(url, { cache: 'no-store', signal: ctrl.signal }); }
+    finally { clearTimeout(timer); }
+}
+
+/**
+ * Loads the song index: the API (SONG_LIBRARY_FALLBACK_URL) first, then the
+ * remote library listing (SONG_LIBRARY_URL), then the built-in mock songs.
+ */
+function openSongCache() {
+    return new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) return reject(new Error('IndexedDB unavailable'));
+        const req = indexedDB.open(SONG_CACHE_DB, 1);
+        req.onupgradeneeded = () => {
+            if (!req.result.objectStoreNames.contains(SONG_CACHE_STORE)) req.result.createObjectStore(SONG_CACHE_STORE);
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error('Cache open failed'));
+    });
+}
+
+async function readCachedSongs() {
+    const db = await openSongCache();
+    return new Promise((resolve, reject) => {
+        const req = db.transaction(SONG_CACHE_STORE, 'readonly').objectStore(SONG_CACHE_STORE).get(SONG_CACHE_KEY);
+        req.onsuccess = () => { db.close(); resolve(req.result || null); };
+        req.onerror = () => { db.close(); reject(req.error || new Error('Cache read failed')); };
+    });
+}
+
+async function writeCachedSongs(songs, sourceLabel) {
+    const db = await openSongCache();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(SONG_CACHE_STORE, 'readwrite');
+        tx.objectStore(SONG_CACHE_STORE).put({
+            songs: songs.map(({ code, name, artistName, url }) => ({ code, name, artistName, url })),
+            savedAt: Date.now(), sourceLabel: sourceLabel || 'Live catalog'
+        }, SONG_CACHE_KEY);
+        tx.oncomplete = () => { db.close(); resolve(true); };
+        tx.onerror = () => { db.close(); reject(tx.error || new Error('Cache write failed')); };
+        tx.onabort = () => { db.close(); reject(tx.error || new Error('Cache write aborted')); };
+    });
+}
+
+/**
+ * Load order: songs.json -> legacy API -> raw directory -> IndexedDB cache -> demo.
+ * Never replace a working live catalog with demo data after a failed refresh.
+ */
+async function loadSongDatabase() {
+    if (dbLoading) return;
+    dbLoading = true;
+    const hadLiveData = songDatabase.length > 0 && dbState.status === 'ready';
+    if (!hadLiveData) dbState.status = 'loading';
+    updateDbUi();
+
+    const sources = SONG_LIBRARY_SOURCES || [
+        { url: SONG_LIBRARY_URL, label: 'songs.json' },
+        { url: SONG_LIBRARY_FALLBACK_URL, label: 'Song API' },
+        { url: REMOTE_BASE, label: 'Remote MIDI directory' }
+    ];
+    const notes = [];
+    let loaded = null;
+
+    for (const src of sources) {
+        try {
+            const res = await fetchWithTimeout(src.url, FETCH_TIMEOUT_MS);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const text = await res.text();
+            if (!text || !text.trim()) throw new Error('empty response');
+            const songs = finalizeSongs(parseSongPayload(text, res.url || src.url));
+            if (!songs.length) throw new Error('response contained no usable songs');
+            loaded = { ...src, songs };
+            break;
+        } catch (err) {
+            console.warn('Song source failed:', src.url, err);
+            notes.push(`${src.label}: ${err && err.name === 'AbortError' ? 'timed out' : (err && err.message) || 'failed'}`);
+        }
+    }
+
+    if (loaded) {
+        setSongs(loaded.songs);
+        Object.assign(dbState, {
+            status: 'ready', sourceLabel: loaded.label, url: loaded.url,
+            count: loaded.songs.length, syncedAt: new Date(), error: notes.join(' • ')
+        });
+        try { await writeCachedSongs(loaded.songs, loaded.label); }
+        catch (e) { console.warn('Song catalog cache write failed:', e); }
+    } else if (hadLiveData) {
+        dbState.error = 'Refresh failed; keeping the current catalog. ' + notes.join(' • ');
+    } else {
+        let cached = null;
+        try { cached = await readCachedSongs(); }
+        catch (e) { console.warn('Song catalog cache unavailable:', e); }
+        const cachedSongs = cached && Array.isArray(cached.songs)
+            ? finalizeSongs(cached.songs.map((item, i) => normalizeSong(item, i, SONG_LIBRARY_URL)))
+            : [];
+        if (cachedSongs.length) {
+            setSongs(cachedSongs);
+            Object.assign(dbState, {
+                status: 'offline', sourceLabel: 'Saved offline catalog', url: SONG_LIBRARY_URL,
+                count: cachedSongs.length, syncedAt: cached.savedAt ? new Date(cached.savedAt) : null,
+                error: 'Live sources unavailable. Using the last saved catalog. ' + notes.join(' • ')
+            });
+        } else {
+            setSongs(finalizeSongs(MOCK_SONGS));
+            Object.assign(dbState, {
+                status: 'offline', sourceLabel: 'Offline demo songs', url: SONG_LIBRARY_URL,
+                count: songDatabase.length, syncedAt: null, error: notes.join(' • ')
+            });
+        }
+    }
+
+    dbLoading = false;
+    updateDbUi();
+    if (!$('library-modal').classList.contains('hidden')) renderLibrary();
+    renderCode();
+    renderStatus();
+}
+
+async function syncDatabase() {
+    const icon = $('sync-icon');
+    icon.classList.add('fa-spin');
+    await loadSongDatabase();
+    icon.classList.remove('fa-spin');
+    if (dbState.status === 'ready') showToast(`Database synced • ${plural(dbState.count, 'song')}`);
+    else showToast('Server unreachable, using offline songs');
+}
+
+// ============================================================================
+// SOUNDFONT STATUS (settings page)
+// ============================================================================
+/** Checks one soundfont URL without downloading the whole file. */
+async function probeSoundfont(url) {
+    try {
+        const res = await fetchWithTimeout(url, 8000);
+        const len = parseInt(res.headers.get('Content-Length'), 10);
+        if (res.body && res.body.cancel) res.body.cancel().catch(() => {}); // headers are enough
+        return { url, ok: res.ok, note: res.ok ? (len ? (len / 1048576).toFixed(1) + ' MB' : 'unknown size') : 'HTTP ' + res.status };
+    } catch (e) {
+        return { url, ok: false, note: 'unreachable' };
+    }
+}
+
+/**
+ * Looks for SOUNDFONT_FILE next to index.html first; if it isn't there, tries the
+ * live server copy. Every location tried is listed in Settings with its result.
+ */
+async function checkSoundfont() {
+    let localUrl = SOUNDFONT_FILE;
+    try { localUrl = new URL(SOUNDFONT_FILE, location.href).href; } catch (e) { /* keep relative */ }
+    Object.assign(sfState, { status: 'checking', url: localUrl, size: '', source: '', tried: [] });
+    renderSoundfontStatus();
+
+    const candidates = [{ url: localUrl, source: 'local' }];
+    if (SOUNDFONT_REMOTE_FALLBACK !== localUrl) candidates.push({ url: SOUNDFONT_REMOTE_FALLBACK, source: 'remote' });
+
+    for (const c of candidates) {
+        const r = await probeSoundfont(c.url);
+        sfState.tried.push({ ...r, source: c.source });
+        if (r.ok) {
+            Object.assign(sfState, { status: 'found', url: r.url, size: r.note, source: c.source });
+            renderSoundfontStatus();
+            return;
+        }
+        renderSoundfontStatus();
+    }
+    const first = sfState.tried[0]; // result for the location next to index.html
+    Object.assign(sfState, { status: first.note === 'unreachable' ? 'unreachable' : 'missing', size: first.note });
+    renderSoundfontStatus();
+}
+
+// ============================================================================
+// RENDERING: DB status, soundfont, settings
+// ============================================================================
+function setPill(el, tone, text) { el.dataset.tone = tone; el.textContent = text; }
+
+function updateDbUi() {
+    const state = dbState.status === 'ready' ? 'ready' : dbState.status; // loading | ready | offline
+    ['db-badge', 'home-db-chip'].forEach((id) => { $(id).dataset.state = state; });
+    $('db-badge-count').textContent = dbState.status === 'loading' ? '…' : dbState.count.toLocaleString();
+
+    const home = $('home-song-count');
+    if (dbState.status === 'loading') home.textContent = 'Loading songs…';
+    else if (dbState.status === 'offline') home.textContent = `Offline demo • ${plural(dbState.count, 'song')}`;
+    else home.textContent = `${plural(dbState.count, 'song')} ready to sing`;
+
+    const tone = { loading: 'info', ready: 'ok', offline: 'warn' }[dbState.status];
+    setPill($('set-db-status'), tone, { loading: 'Loading', ready: 'Online', offline: 'Offline' }[dbState.status]);
+    $('set-db-count').textContent = dbState.count.toLocaleString();
+    $('set-db-synced').textContent = dbState.syncedAt ? dbState.syncedAt.toLocaleString('en-US') : 'Never';
+    $('set-db-error').textContent = dbState.error;
+    $('set-db-error-wrap').classList.toggle('hidden', !dbState.error);
+    $('library-count').textContent = plural(songDatabase.length, 'song');
+}
+
+function renderSoundfontStatus() {
+    const map = {
+        checking: ['info', 'Checking'],
+        found: ['ok', sfState.source === 'remote' ? 'Active (live server)' : 'Active'],
+        missing: ['bad', 'Not found'],
+        unreachable: ['warn', 'Unreachable']
+    };
+    const [tone, text] = map[sfState.status] || map.checking;
+    setPill($('set-sf-status'), tone, text);
+}
+
+function renderSettings() {
+    $('opt-voice').checked = prefs.voice;
+    $('opt-beep').checked = prefs.beep;
+    updateDbUi();
+    renderSoundfontStatus();
+}
+
+// ============================================================================
+// CODE DISPLAY & KEYPAD LOGIC
+// ============================================================================
+/** Draws the 6-digit amber display; padded zeros are dimmed, typed digits glow. */
+function renderCode() {
+    const padded = currentCode.padStart(CODE_LENGTH, '0');
+    const typedFrom = CODE_LENGTH - currentCode.length;
+    let html = '';
+    for (let i = 0; i < CODE_LENGTH; i++) {
+        html += `<span class="${i >= typedFrom ? 'neon-amber' : 'neon-amber-dim'}">${padded[i]}</span>`;
+    }
+    $('code-display').innerHTML = html;
+
+    const onStage = !$('stage-lyrics').classList.contains('hidden');
+    const tc = $('typed-code');
+    tc.classList.toggle('hidden', !(onStage && currentCode));
+    if (onStage && currentCode) { const m = findSong(padded); tc.textContent = padded + (m ? ' • ' + m.name : ''); }
+
+    const match = $('code-match');
+    if (!currentCode) { match.textContent = ''; return; }
+    const song = findSong(padded);
+    match.textContent = song ? `${song.name} - ${song.artistName}` : 'No song with this code';
+    match.style.opacity = song ? '1' : '.6';
+}
+
+function pressDigit(d) {
+    playVoicePrompt(d); // every digit speaks its remote voice prompt immediately
+    if (currentCode.length < CODE_LENGTH) currentCode += d;
+    renderCode();
+}
+
+function handleClear() { currentCode = ''; renderCode(); }
+
+/** CAN: delete the last digit; with no digits, cancel the last reservation. */
+function handleCancel() {
+    if (currentCode) { currentCode = currentCode.slice(0, -1); renderCode(); return; }
+    if (reservedQueue.length) {
+        const removed = reservedQueue.pop();
+        updateQueueUi();
+        flashStatus('RESERVATION CANCELLED', `${removed.code} • ${removed.name}`);
+        return;
+    }
+    flashStatus('NOTHING TO CANCEL', 'The reservation list is empty');
+}
+
+/** RES / 1st RSV: reserve the typed code (priority puts it at the front). */
+function handleReserve(first) {
+    if (!currentCode) {
+        beep('error');
+        flashStatus('ENTER A SONG CODE', 'Type a code, then press RES');
+        return;
+    }
+    const code = currentCode.padStart(CODE_LENGTH, '0');
+    const song = findSong(code);
+    if (!song) {
+        beep('error');
+        flashStatus('CODE NOT FOUND', code);
+        return;
+    }
+    reserveSong(song, { first });
+    currentCode = '';
+    renderCode();
+}
+
+// ============================================================================
+// AUDIO ADJUSTMENTS: KEY / TEMPO / MELODY
+// ============================================================================
+function adjustAudio(target, dir) {
+    const lim = AUDIO_LIMITS[target];
+    if (!lim) return;
+    const step = (lim.stepSize || 1) * dir;
+    audioState[target] = Math.max(lim.min, Math.min(lim.max, audioState[target] + step));
+    renderAudioState();
+    flashStatus(target.toUpperCase(), audioLabel(target), 1400);
+}
+
+const audioLabel = (t) => t === 'key' ? (audioState.key > 0 ? '+' : '') + audioState.key
+    : t === 'tempo' ? (100 + audioState.tempo * 6) + '%'
+    : String(audioState.melody);
+const audioSummary = () => `KEY ${audioLabel('key')} • TEMPO ${audioLabel('tempo')} • MELODY ${audioLabel('melody')}`;
+
+function renderAudioState() {
+    $('val-key').textContent = audioLabel('key');
+    $('val-tempo').textContent = audioLabel('tempo');
+    $('val-melody').textContent = audioLabel('melody');
+    applyAudioToEngine();
+}
+
+// ============================================================================
+// QUEUE & TRANSPORT
+// ============================================================================
+// ============================================================================
+// MIDI / SF2 ENGINE (SpessaSynth + Web Audio fallback), MIDI parser, karaoke lyrics
+// ============================================================================
+class MaruyaSoundEngine {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.spessaSynth = null;
+        this.programs = new Array(16).fill(0);
+        this.chVolumes = new Array(16).fill(100);
+        this.transpose = 0;
+        this.tempoRate = 1.0;
+        this.melodyVolume = 40;
+        this.activeVoices = 0;
+        this.maxVoices = 40;
+        this.sfState = 'idle'; // idle | loading | ready | fallback
+        this.noteOffTimers = new Set();
+        this.melodyChannels = new Set([0, 3]); // replaced per song by auto-detection
+        this.normEnabled = true;
+        this.normValue = 1;
+        this.normGain = null;
+        this.bassDb = 0;
+        this.bassFilter = null;
+        this.limiter = null;
+        this.prep = null;
+    }
+
+    setNorm(value) { this.normValue = value; this.applyNorm(); }
+    setNormEnabled(on) { this.normEnabled = on; this.applyNorm(); }
+    applyNorm() {
+        if (!this.normGain) return;
+        this.normGain.gain.setTargetAtTime(this.normEnabled ? this.normValue : 1, this.ctx.currentTime, 0.05);
+    }
+    setBass(db) {
+        this.bassDb = db;
+        if (this.bassFilter) this.bassFilter.gain.setTargetAtTime(db, this.ctx.currentTime, 0.02);
+    }
+
+    /** Creates the (suspended) AudioContext and the master chain. Launch's tap resumes it. */
+    initContext() {
+        if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) throw new Error('Web Audio is not supported by this browser.');
+            this.ctx = new AudioCtx();
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = 0.75;
+
+            this.bassFilter = this.ctx.createBiquadFilter();
+            this.bassFilter.type = 'lowshelf';
+            this.bassFilter.frequency.value = 110;
+            this.bassFilter.gain.value = this.bassDb;
+
+            this.limiter = this.ctx.createDynamicsCompressor();
+            this.limiter.threshold.value = -6;
+            this.limiter.knee.value = 12;
+            this.limiter.ratio.value = 8;
+            this.limiter.attack.value = 0.003;
+            this.limiter.release.value = 0.2;
+
+            this.normGain = this.ctx.createGain();
+            this.normGain.gain.value = this.normEnabled ? this.normValue : 1;
+            this.masterGain.connect(this.normGain);
+            this.normGain.connect(this.bassFilter);
+            this.bassFilter.connect(this.limiter);
+            this.limiter.connect(this.ctx.destination);
+        }
+        if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+        return this.ctx;
+    }
+
+    /** Starts loading the synth module + audio worklet (runs while the SF2 downloads). */
+    prepare() {
+        if (this.prep) return this.prep;
+        this.initContext();
+        const moduleUrl = 'https://cdn.jsdelivr.net/npm/spessasynth_lib@4.4.0/+esm';
+        const workletUrl = 'https://cdn.jsdelivr.net/npm/spessasynth_lib@4.4.0/dist/spessasynth_processor.min.js';
+        this.sfState = 'loading';
+        this.prep = Promise.all([import(moduleUrl), this.ctx.audioWorklet.addModule(workletUrl)]);
+        this.prep.catch(() => {});
+        return this.prep;
+    }
+
+    /** Builds the synthesizer from the downloaded SF2 bytes. report(pct, text) feeds the loading overlay. */
+    async setupSynth(buffer, report = () => {}) {
+        try {
+            report(12, 'Loading synth module…');
+            const prepTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('Synth module/worklet initialization timed out')), 30000));
+            const [mod] = await Promise.race([this.prepare(), prepTimeout]);
+            if (!mod.WorkletSynthesizer) throw new Error('WorkletSynthesizer export was not found.');
+            report(40, 'Audio worklet ready');
+
+            const synth = new mod.WorkletSynthesizer(this.ctx);
+            synth.connect(this.masterGain);
+            report(58, 'Parsing SoundFont…');
+
+            const bankLoad = (async () => {
+                await synth.soundBankManager.addSoundBank(buffer, 'maruya-main');
+                await synth.isReady;
+            })();
+            const outcome = await Promise.race([bankLoad.then(() => 'ready'), new Promise((res) => setTimeout(() => res('timeout'), 20000))]);
+            if (outcome === 'timeout') throw new Error('SoundFont bank initialization timed out');
+
+            for (let ch = 0; ch < 16; ch++) {
+                synth.programChange(ch, this.programs[ch] || 0);
+                synth.controllerChange(ch, 7, this.chVolumes[ch] ?? 100);
+            }
+            this.spessaSynth = synth;
+            this.sfState = 'ready';
+            report(100, 'Ready');
+            return true;
+        } catch (error) {
+            console.error('SoundFont engine unavailable; using Web Audio fallback:', error);
+            this.sfState = 'fallback';
+            return false;
+        }
+    }
+
+    async ensureRunning() {
+        this.initContext();
+        if (this.ctx.state === 'suspended') await this.ctx.resume();
+    }
+
+    resetControllers() {
+        this.programs.fill(0);
+        this.chVolumes.fill(100);
+        if (this.spessaSynth && this.spessaSynth.resetControllers) { try { this.spessaSynth.resetControllers(); } catch (e) {} }
+    }
+
+    allNotesOff() {
+        for (const timer of this.noteOffTimers) clearTimeout(timer);
+        this.noteOffTimers.clear();
+        if (this.spessaSynth) { try { this.spessaSynth.stopAll(true); } catch (e) { console.warn('MIDI panic failed', e); } }
+    }
+
+    setProgram(ch, prog) {
+        this.programs[ch & 0x0f] = prog & 0x7f;
+        if (this.spessaSynth) { try { this.spessaSynth.programChange(ch & 0x0f, prog & 0x7f); } catch (e) {} }
+    }
+    setChannelVolume(ch, vol) {
+        this.chVolumes[ch & 0x0f] = vol & 0x7f;
+        if (this.spessaSynth) { try { this.spessaSynth.controllerChange(ch & 0x0f, 7, vol & 0x7f); } catch (e) {} }
+    }
+    setController(ch, cc, val) {
+        if (this.spessaSynth) { try { this.spessaSynth.controllerChange(ch & 0x0f, cc & 0x7f, val & 0x7f); } catch (e) {} }
+    }
+
+    playMidiNote(ch, note, vel, durSec = 0.35) {
+        if (!this.ctx) return;
+        const channel = ch & 0x0f;
+        const isMelody = this.melodyChannels.has(channel);
+        let effectiveVel = vel;
+        if (isMelody) {
+            if (this.melodyVolume <= 0) return;
+            effectiveVel = Math.max(1, Math.round(vel * (this.melodyVolume / 100)));
+        }
+        const transposedNote = (channel === 9) ? note : Math.max(12, Math.min(115, note + this.transpose));
+
+        if (this.spessaSynth) {
+            try {
+                this.spessaSynth.noteOn(channel, transposedNote, effectiveVel);
+                const holdMs = Math.max(40, Math.min(10000, (durSec / this.tempoRate) * 1000));
+                const timer = setTimeout(() => {
+                    this.noteOffTimers.delete(timer);
+                    try { if (this.spessaSynth) this.spessaSynth.noteOff(channel, transposedNote); } catch (e) {}
+                }, holdMs);
+                this.noteOffTimers.add(timer);
+                return;
+            } catch (e) {}
+        }
+
+        // Fallback oscillator synth (used when the SF2 is unavailable)
+        if (this.activeVoices >= this.maxVoices) return;
+        if (channel === 9) { this.triggerDrum(note, effectiveVel); return; }
+
+        const now = this.ctx.currentTime;
+        const freq = 440 * Math.pow(2, (transposedNote - 69) / 12);
+        const dur = Math.max(0.08, Math.min(2.4, durSec / this.tempoRate));
+        const osc1 = this.ctx.createOscillator();
+        const osc2 = this.ctx.createOscillator();
+        const filter = this.ctx.createBiquadFilter();
+        const gain = this.ctx.createGain();
+        osc1.type = isMelody ? 'sawtooth' : 'triangle';
+        osc2.type = 'sine';
+        osc1.frequency.setValueAtTime(freq, now);
+        osc2.frequency.setValueAtTime(freq, now);
+        filter.type = 'lowpass';
+        filter.frequency.value = 2400;
+        const peakGain = (effectiveVel / 127) * (this.chVolumes[channel] / 127) * (isMelody ? 0.22 : 0.12);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(Math.max(0.001, peakGain), now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+        osc1.connect(filter); osc2.connect(filter); filter.connect(gain); gain.connect(this.masterGain);
+        this.activeVoices++;
+        osc1.start(now); osc2.start(now);
+        osc1.stop(now + dur + 0.02); osc2.stop(now + dur + 0.02);
+        osc1.onended = () => { this.activeVoices = Math.max(0, this.activeVoices - 1); };
+    }
+
+    triggerDrum(note, vel) {
+        const now = this.ctx.currentTime;
+        const gain = this.ctx.createGain();
+        const osc = this.ctx.createOscillator();
+        osc.type = (note === 35 || note === 36) ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime((note === 35 || note === 36) ? 120 : 240, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + 0.1);
+        gain.gain.setValueAtTime((vel / 127) * 0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+        osc.connect(gain); gain.connect(this.masterGain);
+        osc.start(now); osc.stop(now + 0.12);
+    }
+}
+
+// ---------- MIDI parser ----------
+const LATIN1_DECODER = new TextDecoder('iso-8859-1');
+
+function parseRawMidiBytes(data) {
+    let idx = -1;
+    for (let i = 0; i < Math.min(512, data.length - 4); i++) {
+        if (data[i] === 0x4D && data[i + 1] === 0x54 && data[i + 2] === 0x68 && data[i + 3] === 0x64) { idx = i; break; }
+    }
+    if (idx === -1) throw new Error('Not MIDI');
+    let p = idx + 4;
+    if (p + 10 > data.length) throw new Error('Truncated MIDI header');
+    const headerLen = ((data[p] << 24) >>> 0) + (data[p + 1] << 16) + (data[p + 2] << 8) + data[p + 3];
+    p += 4;
+    const format = (data[p] << 8) | data[p + 1]; p += 2;
+    const tracksCount = (data[p] << 8) | data[p + 1]; p += 2;
+    const currentPPQN = (data[p] << 8) | data[p + 1]; p += 2;
+    if (headerLen < 6 || idx + 8 + headerLen > data.length) throw new Error('Invalid MIDI header length');
+    if (format > 2 || tracksCount < 1 || currentPPQN < 1 || (currentPPQN & 0x8000)) throw new Error('Unsupported MIDI timing/header');
+    p = idx + 8 + headerLen;
+
+    const rawLyricEvents = [], rawTextEvents = [], tempos = [], notes = [], controls = [];
+    const openNotes = Object.create(null);
+    let absoluteMaxTick = 0;
+
+    for (let i = 0; i < tracksCount; i++) {
+        while (p + 8 <= data.length && (data[p] !== 0x4D || data[p + 1] !== 0x54 || data[p + 2] !== 0x72 || data[p + 3] !== 0x6B)) p++;
+        if (p + 8 > data.length) break;
+        p += 4;
+        const trackLen = ((data[p] << 24) >>> 0) + (data[p + 1] << 16) + (data[p + 2] << 8) + data[p + 3];
+        p += 4;
+        const end = Math.min(data.length, p + trackLen);
+        let tick = 0, status = 0;
+
+        while (p < end) {
+            let delta = 0, vlqBytes = 0, vlqDone = false;
+            while (p < end && vlqBytes++ < 4) {
+                const b = data[p++];
+                delta = delta * 128 + (b & 0x7f);
+                if (!(b & 0x80)) { vlqDone = true; break; }
+            }
+            if (!vlqDone) throw new Error('Invalid MIDI delta-time');
+            tick += delta;
+            if (tick > absoluteMaxTick) absoluteMaxTick = tick;
+            if (p >= end) break;
+            if (data[p] >= 0x80) status = data[p++];
+            else if (!status || status >= 0xF0) throw new Error('Invalid MIDI running status');
+
+            if (status === 0xFF) {
+                const type = data[p++];
+                let len = 0;
+                while (p < end) { const b = data[p++]; len = (len << 7) | (b & 0x7f); if (!(b & 0x80)) break; }
+                if (type === 0x51 && len === 3) {
+                    const mpqn = (data[p] << 16) | (data[p + 1] << 8) | data[p + 2];
+                    if (mpqn > 0) tempos.push({ tick, mpqn });
+                } else if (type === 0x05 || type === 0x01) {
+                    const text = LATIN1_DECODER.decode(data.subarray(p, p + len)).replace(/\x00/g, '');
+                    if (type === 0x05 && text) rawLyricEvents.push({ tick, text });
+                    else if (type === 0x01 && text) rawTextEvents.push({ tick, text });
+                }
+                p += len;
+                status = 0;
+            } else if (status === 0xF0 || status === 0xF7) {
+                let len = 0;
+                while (p < end) { const b = data[p++]; len = (len << 7) | (b & 0x7f); if (!(b & 0x80)) break; }
+                p += len;
+                status = 0;
+            } else {
+                const cmd = status & 0xF0, ch = status & 0x0F;
+                if (cmd === 0xC0) controls.push({ tick, type: 'prog', ch, val: data[p++] });
+                else if (cmd === 0xD0) p += 1;
+                else if (cmd === 0xB0) {
+                    const cc = data[p++], val = data[p++];
+                    if (cc === 7) controls.push({ tick, type: 'vol', ch, val });
+                    else controls.push({ tick, type: 'cc', ch, cc, val });
+                } else {
+                    const note = data[p++], vel = data[p++];
+                    const key = `${ch}_${note}`;
+                    if (cmd === 0x90 && vel > 0) {
+                        const noteObj = { tick, note, vel, ch, durTicks: currentPPQN / 2 };
+                        (openNotes[key] || (openNotes[key] = [])).push(noteObj);
+                        notes.push(noteObj);
+                    } else if (cmd === 0x80 || (cmd === 0x90 && vel === 0)) {
+                        const stack = openNotes[key];
+                        if (stack && stack.length) {
+                            const opened = stack.shift();
+                            opened.durTicks = Math.max(1, tick - opened.tick);
+                            if (!stack.length) delete openNotes[key];
+                        }
+                    }
+                }
+            }
+        }
+        p = end;
+    }
+
+    const chosenLyrics = rawLyricEvents.length >= 4 ? rawLyricEvents : rawTextEvents;
+    chosenLyrics.sort((a, b) => a.tick - b.tick);
+    tempos.sort((a, b) => a.tick - b.tick);
+    notes.sort((a, b) => a.tick - b.tick);
+    controls.sort((a, b) => a.tick - b.tick);
+    if (tempos.length === 0 || tempos[0].tick !== 0) tempos.unshift({ tick: 0, mpqn: 500000 });
+
+    const lines = buildKaraokeLines(chosenLyrics, currentPPQN);
+    const instruments = analyzeAndSyncLyrics(lines, notes, controls, currentPPQN);
+    const loudness = estimateLoudness(notes, controls, currentPPQN);
+    let contentMaxTick = absoluteMaxTick;
+    if (lines.length > 0) {
+        const lastLine = lines[lines.length - 1];
+        if (lastLine.syllables.length > 0) contentMaxTick = Math.max(contentMaxTick, lastLine.syllables[lastLine.syllables.length - 1].endTick);
+    }
+    return { lines, tempoMap: tempos, notes, controls, instruments, loudness, ppqn: currentPPQN, totalTicks: contentMaxTick + (currentPPQN * 4) };
+}
+
+// Loudness target for normalization. Raise to make every song louder, lower for quieter.
+const NORM_TARGET = 2.5;
+
+/** Estimates how loud a song is (velocity x channel volume x expression) and returns a leveling gain. */
+function estimateLoudness(notes, controls, ppqn) {
+    if (!notes.length) return null;
+    const vol = [], expr = [];
+    for (let c = 0; c < 16; c++) { vol.push([]); expr.push([]); }
+    controls.forEach((c) => {
+        if (c.type === 'vol') vol[c.ch].push([c.tick, c.val]);
+        else if (c.type === 'cc' && c.cc === 11) expr[c.ch].push([c.tick, c.val]);
+    });
+    const at = (arr, tick, def) => {
+        if (!arr.length) return def;
+        let lo = 0, hi = arr.length;
+        while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m][0] <= tick) lo = m + 1; else hi = m; }
+        return lo ? arr[lo - 1][1] : def;
+    };
+    const win = Math.max(1, Math.round(ppqn / 2));
+    const sums = new Map();
+    for (const n of notes) {
+        const v = at(vol[n.ch], n.tick, 100) / 127;
+        const e = at(expr[n.ch], n.tick, 127) / 127;
+        const amp = (n.vel / 127) * v * v * e * e;
+        const span = Math.min(n.durTicks || win, ppqn * 2);
+        const w0 = Math.floor(n.tick / win), w1 = Math.floor((n.tick + span) / win);
+        for (let w = w0; w <= w1; w++) sums.set(w, (sums.get(w) || 0) + amp);
+    }
+    const vals = Array.from(sums.values()).sort((a, b) => a - b);
+    if (!vals.length) return null;
+    const p90 = vals[Math.min(vals.length - 1, Math.floor(vals.length * 0.9))];
+    const gain = p90 > 0.01 ? Math.max(0.5, Math.min(1.6, NORM_TARGET / p90)) : 1;
+    return { p90, gain };
+}
+
+const GM_FAMILIES = ['Piano', 'Chromatic Perc', 'Organ', 'Guitar', 'Bass', 'Strings', 'Ensemble', 'Brass',
+    'Reed', 'Pipe', 'Synth Lead', 'Synth Pad', 'Synth FX', 'Ethnic', 'Percussive', 'Sound FX'];
+const gmName = (p) => (p === undefined || p === null) ? 'Piano' : GM_FAMILIES[(p >> 3) & 15];
+
+function nearestIdx(sorted, x) {
+    let lo = 0, hi = sorted.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] < x) lo = m + 1; else hi = m; }
+    if (lo >= sorted.length) return sorted.length - 1;
+    if (lo > 0 && Math.abs(sorted[lo - 1] - x) <= Math.abs(sorted[lo] - x)) return lo - 1;
+    return lo;
+}
+
+/** Detects each channel's role (melody / bass / drums / chords) and aligns lyric timing to the melody notes. */
+function analyzeAndSyncLyrics(lines, notes, controls, ppqn) {
+    const sylls = [];
+    lines.forEach((l) => l.syllables.forEach((s) => sylls.push(s)));
+    const firstProg = {};
+    controls.forEach((c) => { if (c.type === 'prog' && firstProg[c.ch] === undefined) firstProg[c.ch] = c.val; });
+
+    const byCh = {};
+    let drumCount = 0;
+    notes.forEach((n) => {
+        if (n.ch === 9) { drumCount++; return; }
+        (byCh[n.ch] = byCh[n.ch] || []).push(n);
+    });
+
+    const tol = ppqn / 2;
+    const chans = [];
+    for (const k in byCh) {
+        const arr = byCh[k];
+        const onsets = arr.map((n) => n.tick);
+        let pitchSum = 0, same = 0;
+        for (let i = 0; i < arr.length; i++) {
+            pitchSum += arr[i].note;
+            if (i > 0 && arr[i].tick === arr[i - 1].tick) same++;
+        }
+        const deltas = [];
+        for (const s of sylls) {
+            const d = onsets[nearestIdx(onsets, s.startTick)] - s.startTick;
+            if (Math.abs(d) <= tol) deltas.push(d);
+        }
+        chans.push({ ch: +k, arr, onsets, deltas, avg: pitchSum / arr.length, poly: same / arr.length, rate: sylls.length ? deltas.length / sylls.length : 0, prog: firstProg[k] });
+    }
+
+    const cands = chans.filter((c) => c.arr.length >= 8);
+    let melody = null;
+    if (sylls.length >= 4) {
+        cands.forEach((c) => { c.score = c.rate - c.poly * 0.3; });
+        const ranked = cands.slice().sort((a, b) => b.score - a.score);
+        if (ranked[0] && ranked[0].rate >= 0.3) melody = ranked[0];
+    }
+    if (!melody && cands.length) {
+        const pool = cands.filter((c) => !(c.prog >= 32 && c.prog <= 39));
+        pool.forEach((c) => { c.score = c.arr.length * (1 - c.poly) * (c.avg > 58 ? 1 : 0.5); });
+        pool.sort((a, b) => b.score - a.score);
+        melody = pool[0] || null;
+    }
+    const bass = cands.find((c) => c !== melody && c.prog >= 32 && c.prog <= 39)
+        || cands.filter((c) => c !== melody && c.avg < 52).sort((a, b) => a.avg - b.avg)[0] || null;
+
+    const sync = { shifted: 0, snapped: 0, rate: 0, applied: false };
+    if (melody && sylls.length >= 4 && melody.rate >= 0.3) {
+        const d = melody.deltas.slice().sort((a, b) => a - b);
+        const med = d[d.length >> 1] || 0;
+        if (Math.abs(med) >= 4) sylls.forEach((s) => { s.startTick = Math.max(0, s.startTick + med); });
+        sync.shifted = med;
+
+        const snapNotes = new Array(sylls.length).fill(null);
+        let prev = 0;
+        sylls.forEach((s, i) => {
+            const n = melody.arr[nearestIdx(melody.onsets, s.startTick)];
+            if (Math.abs(n.tick - s.startTick) <= ppqn / 6) { s.startTick = n.tick; snapNotes[i] = n; sync.snapped++; }
+            if (s.startTick < prev) s.startTick = prev;
+            prev = s.startTick;
+        });
+        sylls.forEach((s, i) => {
+            const next = sylls[i + 1];
+            const gap = next ? Math.max(10, next.startTick - s.startTick) : ppqn * 2;
+            let dur = Math.min(gap, ppqn * 2);
+            const n = snapNotes[i];
+            if (n) dur = Math.min(dur, Math.max(n.durTicks, dur * 0.6));
+            s.durationTicks = Math.max(10, dur);
+            s.invDuration = 1 / s.durationTicks;
+            s.endTick = s.startTick + s.durationTicks;
+        });
+        sync.rate = melody.rate;
+        sync.applied = true;
+    }
+    return { sync, melodyChannels: melody ? new Set([melody.ch]) : null, bassCh: bass ? bass.ch : null };
+}
+
+async function parseMidiBuffer(buffer) {
+    if (!buffer || buffer.byteLength < 8) return null;
+    const view = new DataView(buffer);
+    let rawMidi = null;
+    if (view.getUint32(0) === 0x4D546864) rawMidi = new Uint8Array(buffer);
+    else if (window.pako) {
+        try { rawMidi = window.pako.inflateRaw(new Uint8Array(buffer)); }
+        catch (e) { try { rawMidi = window.pako.inflate(new Uint8Array(buffer)); } catch (e2) { return null; } }
+    }
+    if (!rawMidi) return null;
+    return parseRawMidiBytes(rawMidi);
+}
+
+function buildKaraokeLines(rawEvents, currentPPQN) {
+    const lines = [];
+    let currentLine = null;
+    for (const evt of rawEvents) {
+        const clean = evt.text.replace(/\^/g, '').replace(/^#+/, '');
+        if (!clean.trim()) continue;
+        if (!currentLine) currentLine = { syllables: [] };
+        currentLine.syllables.push({ text: clean, startTick: evt.tick });
+        if (clean.includes('\n') || currentLine.syllables.length >= 6) { lines.push(currentLine); currentLine = null; }
+    }
+    if (currentLine && currentLine.syllables.length > 0) lines.push(currentLine);
+
+    const allSyls = [];
+    lines.forEach((l) => l.syllables.forEach((s) => allSyls.push(s)));
+    for (let i = 0; i < allSyls.length; i++) {
+        const curr = allSyls[i], next = allSyls[i + 1];
+        const gap = next ? (next.startTick - curr.startTick) : (currentPPQN * 2);
+        curr.durationTicks = Math.max(10, Math.min(gap, currentPPQN * 2));
+        curr.invDuration = 1 / curr.durationTicks;
+        curr.endTick = curr.startTick + curr.durationTicks;
+    }
+    return lines;
+}
+
+// ---------- Karaoke lyrics (two lines, syllable fill) ----------
+class KaraokeLyricsConductor {
+    constructor() {
+        this.lines = [];
+        this.activeLineIdx = 0;
+        this.cache = { line1: [], line2: [] };
+        this.renderedTop = -1;
+        this.renderedBot = -1;
+        this.ppqn = 480;
+        this.inInterlude = false;
+    }
+    get line1El() { return $('lyric-line-1'); }
+    get line2El() { return $('lyric-line-2'); }
+    load(parsed) {
+        this.lines = parsed.lines || [];
+        this.ppqn = parsed.ppqn || 480;
+        this.inInterlude = false;
+        this.activeLineIdx = 0;
+        this.renderedTop = -1;
+        this.renderedBot = -1;
+        $('lyrics-overlay').style.display = 'flex';
+        this.renderLines(0, 1);
+    }
+    clear() {
+        this.lines = [];
+        this.inInterlude = false;
+        this.line1El.innerHTML = '';
+        this.line2El.innerHTML = '';
+        $('lyrics-overlay').style.display = 'none';
+    }
+    renderLines(topIdx, botIdx) {
+        if (this.renderedTop !== topIdx) { this.renderedTop = topIdx; this.buildDomLine(this.line1El, this.lines[topIdx], 'line1'); }
+        if (this.renderedBot !== botIdx) { this.renderedBot = botIdx; this.buildDomLine(this.line2El, this.lines[botIdx], 'line2'); }
+    }
+    buildDomLine(domEl, lineData, key) {
+        this.cache[key] = [];
+        if (!domEl || !lineData) { if (domEl) domEl.innerHTML = '&nbsp;'; return; }
+        const syls = lineData.syllables || [];
+        let html = '';
+        for (let i = 0; i < syls.length; i++) {
+            const safe = esc(syls[i].text);
+            html += `<span class="syllable"><span class="base-text">${safe}</span><span class="fill" style="width:0%">${safe}</span></span>`;
+        }
+        domEl.innerHTML = html;
+        this.fitLyricLine(domEl);
+        const fills = domEl.querySelectorAll('.fill');
+        for (let i = 0; i < syls.length; i++) this.cache[key].push({ el: fills[i], start: syls[i].startTick, end: syls[i].endTick, invDur: syls[i].invDuration });
+    }
+    fitLyricLine(domEl) {
+        // Keep each lyric line on one row: shrink the font only when a long phrase would overflow.
+        const baseSize = Math.min(34, Math.max(20, window.innerWidth * 0.07));
+        domEl.style.fontSize = baseSize + 'px';
+        requestAnimationFrame(() => {
+            if (!domEl.isConnected) return;
+            let size = baseSize;
+            while (domEl.scrollWidth > domEl.clientWidth + 1 && size > 14) { size -= 0.5; domEl.style.fontSize = size + 'px'; }
+        });
+    }
+    update(currentTick) {
+        if (!this.lines.length) return;
+        // Long instrumental gaps show an interlude card.
+        let interlude = false;
+        for (let i = 0; i < this.lines.length - 1; i++) {
+            const previous = this.lines[i].syllables, next = this.lines[i + 1].syllables;
+            if (!previous.length || !next.length) continue;
+            const gapStart = previous[previous.length - 1].endTick, gapEnd = next[0].startTick;
+            if (gapEnd - gapStart >= this.ppqn * 1.5 && currentTick >= gapStart && currentTick < gapEnd) { interlude = true; break; }
+        }
+        if (interlude) {
+            if (!this.inInterlude) {
+                this.inInterlude = true;
+                this.line1El.innerHTML = '<span class="interlude-line">♪ Instrumental ♪</span>';
+                this.line2El.innerHTML = '<span class="interlude-line">Interlude</span>';
+                this.cache.line1 = []; this.cache.line2 = [];
+            }
+            return;
+        }
+        if (this.inInterlude) { this.inInterlude = false; this.renderedTop = -1; this.renderedBot = -1; }
+
+        while (this.activeLineIdx > 0 && currentTick < this.lines[this.activeLineIdx].syllables[0].startTick) this.activeLineIdx--;
+        while (this.activeLineIdx + 1 < this.lines.length) {
+            if (currentTick >= this.lines[this.activeLineIdx + 1].syllables[0].startTick) this.activeLineIdx++;
+            else break;
+        }
+        const topIdx = this.activeLineIdx % 2 === 0 ? this.activeLineIdx : this.activeLineIdx - 1;
+        this.renderLines(Math.max(0, topIdx), Math.max(1, topIdx + 1));
+        this.fillSyllables(this.cache.line1, currentTick);
+        this.fillSyllables(this.cache.line2, currentTick);
+    }
+    fillSyllables(items, tick) {
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (tick <= it.start) it.el.style.width = '0%';
+            else if (tick >= it.end) it.el.style.width = '100%';
+            else it.el.style.width = Math.min(100, Math.max(0, (tick - it.start) * it.invDur * 100)).toFixed(1) + '%';
+        }
+    }
+}
+
+const soundEngine = new MaruyaSoundEngine();
+const lyricsConductor = new KaraokeLyricsConductor();
+const playback = { token: 0, raf: null, paused: false, lyricOffsetMs: 0, bassLevel: 0 };
+
+/** Pushes the KEY / TEMPO / MELODY steps from the UI into the sound engine. */
+function applyAudioToEngine() {
+    soundEngine.transpose = audioState.key;
+    soundEngine.tempoRate = Math.max(0.5, 1 + audioState.tempo * 0.06);
+    soundEngine.melodyVolume = audioState.melody;
+}
+
+/** Plays one remote MP3 prompt (score announcement) and resolves when it ends. */
+function playVoiceFile(file) {
+    return new Promise((resolve) => {
+        const audio = new Audio(REMOTE_BASE + file);
+        audio.preload = 'auto';
+        let timer;
+        const done = () => { clearTimeout(timer); audio.onended = audio.onerror = null; resolve(); };
+        audio.onended = done; audio.onerror = done;
+        timer = setTimeout(() => { audio.pause(); done(); }, 12000);
+        const p = audio.play();
+        if (p && p.catch) p.catch(done);
+    });
+}
+
+async function announceScore(score) {
+    if (!prefs.voice) return;
+    const band = score >= 100 ? 'score_100.mp3' : score >= 91 ? 'score_91_99.mp3' : score >= 81 ? 'score_81_90.mp3' : score >= 76 ? 'score_76_80.mp3' : 'score_61_75.mp3';
+    for (const d of String(score)) await playVoiceFile(`num_${d}.mp3`);
+    await playVoiceFile(band);
+}
+
+/** Shows the lyrics stage in place of the status card (and back). */
+function showLyricsStage(on) {
+    $('stage-lyrics').classList.toggle('hidden', !on);
+    $('status-card').classList.toggle('hidden', on);
+    $('player-topbar').classList.toggle('hidden', on); // no code display / back / gear while singing
+    renderCode();
+}
+
+function haltPlayback() {
+    if (playback.raf) { cancelAnimationFrame(playback.raf); playback.raf = null; }
+    soundEngine.allNotesOff();
+    lyricsConductor.clear();
+    $('overlay-countdown').classList.add('hidden');
+    $('overlay-paused').classList.add('hidden');
+}
+
+async function runSong(song) {
+    const token = ++playback.token;
+    haltPlayback();
+    playback.paused = false;
+    showLyricsStage(true);
+    try { await soundEngine.ensureRunning(); } catch (e) { console.warn('Audio start failed:', e); }
+    if (token !== playback.token) return;
+
+    // Load + parse the MIDI file
+    let parsed = null;
+    if (song.url) {
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 20000);
+            try {
+                const res = await fetch(song.url, { signal: ctrl.signal, mode: 'cors' });
+                if (!res.ok) throw new Error('MIDI HTTP ' + res.status);
+                parsed = await parseMidiBuffer(await res.arrayBuffer());
+            } finally { clearTimeout(timer); }
+        } catch (e) { console.warn('MIDI load failed', e); }
+    }
+    if (token !== playback.token) return;
+    if (!parsed || !parsed.notes.length) {
+        parsed = {
+            lines: [{ syllables: [{ text: song.name, startTick: 0, endTick: 1920, durationTicks: 1920, invDuration: 1 / 1920 }] }],
+            tempoMap: [{ tick: 0, mpqn: 500000 }], notes: [], controls: [], ppqn: 480, totalTicks: 4000
+        };
+        flashStatus('MIDI NOT AVAILABLE', song.name, 2500);
+    }
+
+    // 3-2-1-GO countdown
+    const cd = $('overlay-countdown');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    cd.classList.remove('hidden');
+    for (const count of ['3', '2', '1', 'GO!']) {
+        if (token !== playback.token) { cd.classList.add('hidden'); return; }
+        cd.textContent = count;
+        cd.style.animation = 'none'; void cd.offsetWidth; cd.style.animation = '';
+        await wait(count === 'GO!' ? 420 : 720);
+    }
+    cd.classList.add('hidden');
+    if (token !== playback.token) return;
+
+    soundEngine.resetControllers();
+    lyricsConductor.load(parsed);
+    const inst = parsed.instruments;
+    soundEngine.melodyChannels = (inst && inst.melodyChannels) ? inst.melodyChannels : new Set([0, 3]);
+    soundEngine.setNorm(parsed.loudness ? parsed.loudness.gain : 1);
+    applyAudioToEngine();
+    player.elapsedMs = 0;
+    player.lastTick = performance.now();
+
+    let currentTick = 0, noteIdx = 0, ctrlIdx = 0;
+    let last = performance.now();
+    const ppqn = parsed.ppqn || 480;
+
+    const loop = (now) => {
+        if (token !== playback.token) return;
+        const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
+        last = now;
+        if (!playback.paused) {
+            let mpqn = 500000;
+            for (let i = 0; i < parsed.tempoMap.length; i++) {
+                if (currentTick >= parsed.tempoMap[i].tick) mpqn = parsed.tempoMap[i].mpqn; else break;
+            }
+            currentTick += (dt / (mpqn / 1000000)) * ppqn * soundEngine.tempoRate;
+            while (ctrlIdx < parsed.controls.length && parsed.controls[ctrlIdx].tick <= currentTick) {
+                const c = parsed.controls[ctrlIdx++];
+                if (c.type === 'prog') soundEngine.setProgram(c.ch, c.val);
+                else if (c.type === 'vol') soundEngine.setChannelVolume(c.ch, c.val);
+                else if (c.type === 'cc') soundEngine.setController(c.ch, c.cc, c.val);
+            }
+            while (noteIdx < parsed.notes.length && parsed.notes[noteIdx].tick <= currentTick) {
+                const n = parsed.notes[noteIdx++];
+                soundEngine.playMidiNote(n.ch, n.note, n.vel, ((n.durTicks || 240) / ppqn) * (mpqn / 1000000));
+            }
+            const lyrOffTicks = (playback.lyricOffsetMs / 1000) / (mpqn / 1000000) * ppqn;
+            lyricsConductor.update(currentTick - lyrOffTicks);
+            if (currentTick >= parsed.totalTicks) { songEnded(token); return; }
+        }
+        playback.raf = requestAnimationFrame(loop);
+    };
+    playback.raf = requestAnimationFrame(loop);
+}
+
+/** Natural end of a song: announce the score, then continue with the queue. */
+async function songEnded(token) {
+    if (token !== playback.token) return;
+    haltPlayback();
+    showLyricsStage(false);
+    const score = 95; // placeholder until microphone scoring exists
+    flashStatus('YOUR SCORE: ' + score, '⭐⭐⭐⭐⭐ EXCELLENT SINGER!', 7000);
+    await announceScore(score);
+    if (token !== playback.token) return; // user pressed something during the announcement
+    if (!startNext()) stopPlayback({ title: 'END OF QUEUE', sub: 'No more reserved songs' });
+}
+
+/**
+ * PLAYBACK ENGINE (used by the transport in this page).
+ * prepare(): starts loading the synth while the SF2 downloads. init(sf2Blob): builds the synth.
+ */
+const engine = {
+    onProgress: null,
+    prepare() { try { soundEngine.prepare(); } catch (e) { console.warn('Synth prepare failed:', e); } },
+    async init(soundfontBlob) {
+        soundEngine.initContext();
+        if (!soundfontBlob) { soundEngine.sfState = 'fallback'; return false; }
+        const buf = await soundfontBlob.arrayBuffer();
+        return soundEngine.setupSynth(buf, (pct, text) => { if (engine.onProgress) engine.onProgress(pct, text); });
+    },
+    start(song) { runSong(song); },
+    pause() { playback.paused = true; soundEngine.allNotesOff(); $('overlay-paused').classList.remove('hidden'); },
+    resume() { playback.paused = false; $('overlay-paused').classList.add('hidden'); },
+    stop() { playback.token++; haltPlayback(); showLyricsStage(false); }
+};
+
+// Sound-engine settings (Settings page)
+function toggleNorm() {
+    soundEngine.setNormEnabled(!soundEngine.normEnabled);
+    renderEngineSettings();
+}
+function cycleBass() {
+    const steps = [0, 5, 9, 13];
+    playback.bassLevel = (playback.bassLevel + 1) % steps.length;
+    soundEngine.setBass(steps[playback.bassLevel]);
+    renderEngineSettings();
+}
+function adjustLyricSync(dir) {
+    playback.lyricOffsetMs = Math.max(-1000, Math.min(1000, playback.lyricOffsetMs + dir * 50));
+    renderEngineSettings();
+}
+function renderEngineSettings() {
+    const n = $('btn-norm');
+    n.textContent = soundEngine.normEnabled ? 'ON' : 'OFF';
+    n.className = 'px-4 py-1.5 rounded-lg text-xs font-extrabold ' + (soundEngine.normEnabled ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600');
+    $('btn-bass').textContent = playback.bassLevel === 0 ? 'OFF' : 'LEVEL ' + playback.bassLevel;
+    $('val-lyr').textContent = playback.lyricOffsetMs + ' ms';
+}
+
+// ---------- Cross-device remote receiver (MQTT over WebSocket) ----------
+// The six-character room code is the pairing secret; the remote page publishes commands to this room.
+const REMOTE_BROKER = 'wss://broker.emqx.io:8084/mqtt';
+const REMOTE_ROOM_KEY = 'maruya-megaoke-room-v1';
+let remoteRoomCode = '';
+try { remoteRoomCode = localStorage.getItem(REMOTE_ROOM_KEY) || ''; } catch (e) { /* storage unavailable */ }
+if (!/^[A-Z0-9]{6}$/.test(remoteRoomCode)) {
+    remoteRoomCode = Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
+    try { localStorage.setItem(REMOTE_ROOM_KEY, remoteRoomCode); } catch (e) { /* ignore */ }
+}
+let remoteClient = null;
+
+function connectRemoteReceiver() {
+    if (!window.mqtt || remoteClient) return;
+    try {
+        remoteClient = mqtt.connect(REMOTE_BROKER, { clientId: 'maruya_rx_' + Math.random().toString(16).slice(2, 12), clean: true, connectTimeout: 10000, reconnectPeriod: 5000, keepalive: 30 });
+        remoteClient.on('connect', () => remoteClient.subscribe(`maruya/megaoke/${remoteRoomCode}/cmd`, { qos: 0 }));
+        remoteClient.on('error', (err) => console.warn('Remote receiver:', err.message));
+        remoteClient.on('message', (_t, payload) => {
+            try { handleRemoteCommand(JSON.parse(payload.toString())); } catch (err) { console.warn('Invalid remote command', err); }
+        });
+    } catch (err) { console.warn('Remote receiver unavailable:', err); }
+}
+
+function handleRemoteCommand(msg) {
+    if (!msg || typeof msg.action !== 'string') return;
+    const dir = Number(msg.value) < 0 ? -1 : 1;
+    switch (msg.action) {
+        case 'digit': if (/^[0-9]$/.test(String(msg.value))) pressDigit(String(msg.value)); break;
+        case 'backspace': currentCode = currentCode.slice(0, -1); renderCode(); break;
+        case 'reserve': handleReserve(false); break;
+        case 'firstReserve': handleReserve(true); break;
+        case 'cancel': handleCancel(); break;
+        case 'playPause': togglePlayPause(); break;
+        case 'replay': prevSong(); break;
+        case 'next': nextSong(); break;
+        case 'stop': dispatch('stop', {}); break;
+        case 'key': adjustAudio('key', dir); break;
+        case 'tempo': adjustAudio('tempo', dir); break;
+        case 'melody': adjustAudio('melody', 1); break;
+        case 'bass': cycleBass(); break;
+        case 'search': openLibrary({ view: 'library', mode: 'all' }); break;
+        case 'queue': openLibrary({ view: 'queue' }); break;
+        case 'background': cycleBGV(); break;
+        case 'norm': toggleNorm(); break;
+        case 'lyricSync': adjustLyricSync(dir); break;
+        default: break;
+    }
+}
+
+
+function reserveSong(song, { first = false } = {}) {
+    if (first) reservedQueue.unshift(song); else reservedQueue.push(song);
+    beep('reserve');
+    updateQueueUi();
+    // Natural karaoke behavior: if idle on the player screen, start straight away.
+    if (player.state === 'idle' && currentPage === 'player') { startNext(); return; }
+    flashStatus(first ? 'PRIORITY RESERVED' : 'RESERVED', `${song.code} • ${song.name}`);
+    if (currentPage !== 'player') showToast(`Reserved ${song.code} • ${song.name}`);
+}
+
+function startNext() {
+    const next = reservedQueue.shift();
+    if (!next) return false;
+    beginSong(next);
+    return true;
+}
+
+function beginSong(song) {
+    player.current = song;
+    player.state = 'playing';
+    player.elapsedMs = 0;
+    statusOverride = null;
+    ensureTimer();
+    engine.start(song);
+    updateQueueUi();
+    renderTransport();
+    renderStatus();
+}
+
+function stopPlayback(message) {
+    if (player.state !== 'idle') engine.stop();
+    player.state = 'idle';
+    player.current = null;
+    player.elapsedMs = 0;
+    clearTimer();
+    renderTransport();
+    updateQueueUi();
+    if (message) flashStatus(message.title, message.sub); else renderStatus();
+}
+
+function togglePlayPause() {
+    if (player.state === 'playing') {
+        player.state = 'paused'; engine.pause();
+    } else if (player.state === 'paused') {
+        player.state = 'playing'; player.lastTick = performance.now(); engine.resume();
+    } else if (currentCode) {
+        handleReserve(false); // reserves the typed code and auto-starts when idle
+        return;
+    } else if (reservedQueue.length) {
+        startNext();
+        return;
+    } else {
+        beep('error');
+        flashStatus('QUEUE EMPTY', 'Reserve a song first');
+        return;
+    }
+    renderTransport();
+    renderStatus();
+}
+
+function prevSong() {
+    if (!player.current) { flashStatus('NOTHING PLAYING', 'Reserve a song first'); return; }
+    player.elapsedMs = 0;
+    if (player.state === 'paused') { player.state = 'playing'; player.lastTick = performance.now(); }
+    engine.start(player.current);
+    renderTransport();
+    flashStatus('RESTARTING', player.current.name, 1400);
+}
+
+function nextSong() {
+    if (startNext()) return;
+    if (player.state !== 'idle') stopPlayback({ title: 'END OF QUEUE', sub: 'No more reserved songs' });
+    else flashStatus('QUEUE EMPTY', 'Reserve a song first');
+}
+
+function ensureTimer() {
+    if (player.timer) return;
+    player.lastTick = performance.now();
+    player.timer = setInterval(() => {
+        const now = performance.now();
+        if (player.state === 'playing') player.elapsedMs += now - player.lastTick;
+        player.lastTick = now;
+        if (currentPage === 'player' && player.state === 'playing') renderStatus();
+    }, 250);
+}
+function clearTimer() {
+    if (player.timer) { clearInterval(player.timer); player.timer = null; }
+}
+
+function renderTransport() {
+    $('play-icon').className = 'fa-solid ' + (player.state === 'playing' ? 'fa-pause' : 'fa-play');
+}
+
+// ============================================================================
+// STATUS FEED
+// ============================================================================
+const fmtTime = (ms) => {
+    const s = Math.floor(ms / 1000);
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+};
+
+/** Shows a short-lived message, then falls back to the live status. */
+function flashStatus(title, sub = '', ms = 2400) {
+    statusOverride = { title, sub };
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => { statusOverride = null; renderStatus(); }, ms);
+    renderStatus();
+}
+
+function renderStatus() {
+    let kicker = 'System Status', title, sub = '', meta = '', glow = false;
+    if (statusOverride) {
+        ({ title, sub } = statusOverride);
+    } else if (dbState.status === 'loading') {
+        title = 'LOADING SONG DATABASE…';
+        sub = 'Connecting to Maruya Videoke servers';
+    } else if (player.current) {
+        kicker = player.state === 'paused' ? 'Paused' : 'Now Playing';
+        title = player.current.name;
+        sub = `${player.current.artistName} • ${fmtTime(player.elapsedMs)}`;
+        meta = audioSummary();
+        glow = true;
+    } else if (reservedQueue.length) {
+        title = 'PRESS PLAY';
+        sub = `${plural(reservedQueue.length, 'song')} reserved`;
+    } else {
+        title = 'SELECT A SONG';
+        sub = dbState.status === 'offline' ? 'Offline demo songs loaded. Enter a code, then press RES' : 'Enter a 6-digit code, then press RES';
+    }
+    $('status-kicker').textContent = kicker;
+    const t = $('status-title');
+    t.textContent = title;
+    t.classList.toggle('neon-amber', glow);
+    $('status-sub').textContent = sub;
+    $('status-meta').textContent = meta;
+}
+
+function renderStatusQueue() {
+    const box = $('status-queue');
+    let html = '';
+    if (player.current) html += `<span class="q-chip playing">${player.current.code}</span>`;
+    if (reservedQueue.length) {
+        html += `<span class="q-chip label">RSV ${reservedQueue.length}</span>`;
+        reservedQueue.slice(0, 5).forEach((s) => { html += `<span class="q-chip">${s.code}</span>`; });
+        if (reservedQueue.length > 5) html += `<span class="q-chip label">+${reservedQueue.length - 5}</span>`;
+    }
+    box.innerHTML = html;
+    $('lyrics-queue').innerHTML = html;
+}
+
+/** Refreshes everything that shows the queue. */
+function updateQueueUi() {
+    const n = reservedQueue.length;
+    $('modal-q-badge').textContent = n;
+    const badge = $('rsv-badge');
+    badge.textContent = n;
+    badge.classList.toggle('hidden', n === 0);
+    renderStatusQueue();
+    renderStatus();
+    if (!$('library-modal').classList.contains('hidden') && libraryView === 'queue') renderLibrary();
+}
+
+// ============================================================================
+// TOAST
+// ============================================================================
+function showToast(msg, ms = 1800) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.style.opacity = '1';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.style.opacity = '0'; }, ms);
+}
+
+// ============================================================================
+// SONG LIBRARY MODAL
+// ============================================================================
+const LIB_TITLES = { all: 'Song Library', title: 'Search by Title', artist: 'Artist Search', code: 'Search by Code', new: 'New Songs' };
+const LIB_PLACEHOLDERS = { all: 'Search title, artist, or code…', title: 'Search by song title…', artist: 'Search by artist…', code: 'Enter song code…', new: 'Filter new songs…' };
+
+function openLibrary({ view = 'library', mode } = {}) {
+    if (mode) libraryMode = mode;
+    libraryView = view;
+    $('library-modal').classList.remove('hidden');
+    syncLibraryChrome();
+    renderLibrary();
+    if (view === 'library' && libraryMode !== 'new') setTimeout(() => $('library-search').focus(), 60);
+}
+
+function closeLibrary() {
+    $('library-modal').classList.add('hidden');
+    $('library-search').blur();
+}
+
+/** Keeps tabs, chips, title and placeholder in sync with the current view/mode. */
+function syncLibraryChrome() {
+    const isQueue = libraryView === 'queue';
+    $('tab-library').classList.toggle('active', !isQueue);
+    $('tab-queue').classList.toggle('active', isQueue);
+    $('library-controls').classList.toggle('hidden', isQueue);
+    $('library-title').textContent = isQueue ? 'RSV Queue' : LIB_TITLES[libraryMode];
+    $('library-search').placeholder = LIB_PLACEHOLDERS[libraryMode];
+    $('library-modal').querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c.dataset.mode === libraryMode));
+    $('library-clear').classList.toggle('hidden', !$('library-search').value);
+}
+
+/** Filters the song list; only the first MAX_RENDER matches are returned for the DOM. */
+function filterSongs(query, mode) {
+    const q = query.trim().toLowerCase();
+    const digits = q.replace(/\D/g, '');
+    const base = mode === 'new' ? songsNewestFirst : songDatabase;
+    const out = [];
+    let total = 0;
+    for (const s of base) {
+        let ok = true;
+        if (q) {
+            if (mode === 'title') ok = s.nameLower.includes(q);
+            else if (mode === 'artist') ok = s.artistLower.includes(q);
+            else if (mode === 'code') ok = digits !== '' && s.code.includes(digits);
+            else ok = s.key.includes(q);
+        }
+        if (ok) { total++; if (out.length < MAX_RENDER) out.push(s); }
+    }
+    return { out, total };
+}
+
+const songRowHtml = (s) => `
+<div class="song-row">
+    <div class="min-w-0 flex-1">
+        <div class="song-code">${s.code}</div>
+        <div class="song-title">${esc(s.name)}</div>
+        <div class="song-artist">${esc(s.artistName)}</div>
+    </div>
+    <button type="button" class="rsv-btn" data-action="reserve-song" data-code="${s.code}">Reserve</button>
+</div>`;
+
+const queueRowHtml = (s, i) => `
+<div class="song-row">
+    <div class="q-index">${i + 1}</div>
+    <div class="min-w-0 flex-1">
+        <div class="song-code">${s.code}</div>
+        <div class="song-title">${esc(s.name)}</div>
+        <div class="song-artist">${esc(s.artistName)}</div>
+    </div>
+    <button type="button" class="icon-btn play" data-action="queue-play" data-idx="${i}" aria-label="Play now"><i class="fa-solid fa-play"></i></button>
+    <button type="button" class="icon-btn del" data-action="queue-remove" data-idx="${i}" aria-label="Remove"><i class="fa-solid fa-xmark"></i></button>
+</div>`;
+
+function renderLibrary() {
+    const list = $('library-list');
+    const footer = $('library-footer');
+    $('library-clear').classList.toggle('hidden', !$('library-search').value);
+
+    if (libraryView === 'queue') {
+        $('library-count').textContent = plural(reservedQueue.length, 'reserved song');
+        if (!reservedQueue.length) {
+            list.innerHTML = '<div class="empty-state"><i class="fa-solid fa-list-ol text-3xl mb-3 block opacity-60"></i>No songs reserved yet</div>';
+            footer.innerHTML = '';
+            return;
+        }
+        list.innerHTML = reservedQueue.map(queueRowHtml).join('');
+        footer.innerHTML = '<button type="button" data-action="queue-clear" class="px-4 py-2 rounded-xl bg-red-600/80 text-white text-xs font-extrabold">Clear all reservations</button>';
+        return;
+    }
+
+    const { out, total } = filterSongs($('library-search').value, libraryMode);
+    $('library-count').textContent = plural(total, 'song');
+    if (!out.length) {
+        list.innerHTML = '<div class="empty-state"><i class="fa-solid fa-compact-disc text-3xl mb-3 block opacity-60"></i>No songs match your search</div>';
+        footer.textContent = '';
+        return;
+    }
+    list.innerHTML = out.map(songRowHtml).join('');
+    footer.textContent = total > out.length ? `Showing first ${out.length} of ${total.toLocaleString()} • refine your search to see more` : '';
+}
+
+// ============================================================================
+// VISUAL ENGINE: particle canvas + background video
+// ============================================================================
+const FX = { canvas: null, ctx: null, w: 0, h: 0, dpr: 1, list: [], raf: 0, last: 0, running: false };
+const FX_COLORS = ['251,191,36', '244,114,182', '34,211,238', '167,139,250']; // amber, pink, cyan, violet
+const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+function fxSpawn(randomY) {
+    const color = FX_COLORS[(Math.random() * FX_COLORS.length) | 0];
+    return {
+        x: Math.random() * FX.w,
+        y: randomY ? Math.random() * FX.h : FX.h + 12,
+        r: 1 + Math.random() * 2.4,
+        vy: (0.15 + Math.random() * 0.55) * (REDUCED_MOTION ? 0.35 : 1),
+        sway: 0.0004 + Math.random() * 0.0012,
+        phase: Math.random() * Math.PI * 2,
+        tw: 0.6 + Math.random() * 1.4,
+        alpha: 0.35 + Math.random() * 0.55,
+        fill: `rgb(${color})`
+    };
+}
+
+function fxResize() {
+    if (!FX.canvas || !FX.ctx) return;
+    const rect = FX.canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return; // hidden page
+    FX.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    FX.w = rect.width;
+    FX.h = rect.height;
+    FX.canvas.width = Math.round(rect.width * FX.dpr);
+    FX.canvas.height = Math.round(rect.height * FX.dpr);
+    FX.ctx.setTransform(FX.dpr, 0, 0, FX.dpr, 0, 0);
+    const target = Math.min(REDUCED_MOTION ? 20 : 70, Math.round((FX.w * FX.h) / 9000));
+    while (FX.list.length < target) FX.list.push(fxSpawn(true));
+    FX.list.length = Math.min(FX.list.length, target);
+}
+
+function fxFrame(t) {
+    if (!FX.running) return;
+    const dt = Math.min(50, t - (FX.last || t)) / 16.67;
+    FX.last = t;
+    const ctx = FX.ctx;
+    ctx.clearRect(0, 0, FX.w, FX.h);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of FX.list) {
+        p.y -= p.vy * dt;
+        p.x += Math.sin(p.phase + t * p.sway) * 0.35 * dt;
+        if (p.y < -12) Object.assign(p, fxSpawn(false), { x: Math.random() * FX.w });
+        const a = p.alpha * (0.65 + 0.35 * Math.sin(t * 0.002 * p.tw + p.phase));
+        ctx.fillStyle = p.fill;
+        ctx.globalAlpha = a * 0.16;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2); ctx.fill(); // soft glow
+        ctx.globalAlpha = a;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();       // core
+    }
+    ctx.globalAlpha = 1;
+    FX.raf = requestAnimationFrame(fxFrame);
+}
+
+function fxStart() {
+    if (FX.running || !FX.ctx) return;
+    fxResize();
+    FX.running = true;
+    FX.last = 0;
+    FX.raf = requestAnimationFrame(fxFrame);
+}
+function fxStop() {
+    FX.running = false;
+    cancelAnimationFrame(FX.raf);
+}
+
+function initVisuals() {
+    FX.canvas = $('particle-canvas');
+    FX.ctx = FX.canvas.getContext ? FX.canvas.getContext('2d') : null;
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fxResize).observe(FX.canvas);
+    else window.addEventListener('resize', fxResize);
+
+    // Layer 2: the video always defaults to the first BGV in the list
+    const v = $('bgv-video');
+    v.muted = true;
+    v.src = BGV_LIST[0];
+    v.addEventListener('error', () => {
+        if (currentPage === 'player') flashStatus('BACKGROUND VIDEO UNAVAILABLE', 'Showing particle background', 3000);
+    });
+}
+
+/** BGV button: cycles motion1 -> motion4, then loops back to motion1. */
+function cycleBGV() {
+    bgvIndex = (bgvIndex + 1) % BGV_LIST.length;
+    const v = $('bgv-video');
+    v.src = BGV_LIST[bgvIndex];
+    v.load();
+    const p = v.play();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+    flashStatus('BACKGROUND VIDEO', `Motion ${bgvIndex + 1} of ${BGV_LIST.length}`, 1600);
+}
+
+// ============================================================================
+// NAVIGATION
+// ============================================================================
+const PAGES = { landing: $('page-landing'), player: $('page-player'), settings: $('page-settings') };
+
+function showPage(name) {
+    if (name === currentPage || !PAGES[name]) return;
+    const leaving = currentPage;
+    Object.entries(PAGES).forEach(([key, el]) => el.classList.toggle('hidden', key !== name));
+    prevPage = leaving;
+    currentPage = name;
+
+    if (name === 'player') {
+        preloadVoicePrompts();
+        fxStart();
+        const p = $('bgv-video').play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+        renderCode();
+        renderStatus();
+        if (player.state === 'idle' && reservedQueue.length) flashStatus('PRESS PLAY', `${plural(reservedQueue.length, 'song')} reserved`);
+    } else if (leaving === 'player') {
+        fxStop();
+        $('bgv-video').pause();
+    }
+    if (name === 'settings') { renderSettings(); checkSoundfont(); }
+}
+
+// ============================================================================
+// CLOCK + NETWORK ICON
+// ============================================================================
+function updateClock() {
+    const now = new Date();
+    const date = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const text = `${date} | ${time}`;
+    const el = $('clock');
+    if (el.textContent !== text) el.textContent = text;
+}
+
+function updateNetworkIcon() {
+    const online = navigator.onLine !== false;
+    const icon = $('wifi-icon');
+    icon.classList.toggle('wifi-on', online);
+    icon.classList.toggle('wifi-off', !online);
+}
+
+// ============================================================================
+// ACTION DISPATCH (one delegated handler for every button)
+// ============================================================================
+// Actions that make their own sound (digit voice prompts, reserve / error tones)
+const SILENT_ACTIONS = new Set(['digit', 'res', 'first-rsv', 'reserve-song']);
+
+function dispatch(action, data = {}) {
+    if (!SILENT_ACTIONS.has(action)) beep('tap'); // generic command beep (also unlocks audio)
+    switch (action) {
+        // Landing menu
+        case 'enter-karaoke': showPage('player'); break;
+        case 'media-player':
+            showPage('player');
+            if (player.state === 'idle') {
+                if (reservedQueue.length) startNext();
+                else flashStatus('MEDIA PLAYER', 'Reserve a song to begin');
+            }
+            break;
+        case 'sync-db': syncDatabase(); break;
+        case 'song-search': openLibrary({ view: 'library', mode: 'all' }); break;
+        case 'artist-search': openLibrary({ view: 'library', mode: 'artist' }); break;
+        case 'new-songs': openLibrary({ view: 'library', mode: 'new' }); break;
+
+        // Navigation
+        case 'open-settings': showPage('settings'); break;
+        case 'back': showPage('landing'); break;
+        case 'settings-back': showPage(prevPage && prevPage !== 'settings' ? prevPage : 'landing'); break;
+        case 'recheck-sf': checkSoundfont(); break;
+        case 'toggle-norm': toggleNorm(); break;
+        case 'cycle-bass': cycleBass(); break;
+        case 'lyr': adjustLyricSync(Number(data.step)); break;
+
+        // Keypad
+        case 'digit': pressDigit(data.value); break;
+        case 'clear': handleClear(); break;
+        case 'can': handleCancel(); break;
+        case 'res': handleReserve(false); break;
+        case 'first-rsv': handleReserve(true); break;
+        case 'rsv-list': openLibrary({ view: 'queue' }); break;
+        case 'bgv': cycleBGV(); break;
+
+        // Audio adjustments and transport
+        case 'adj': adjustAudio(data.target, Number(data.step)); break;
+        case 'search': openLibrary({ view: 'library', mode: 'all' }); break;
+        case 'prev': prevSong(); break;
+        case 'play': togglePlayPause(); break;
+        case 'next': nextSong(); break;
+        case 'stop':
+            if (player.state === 'idle') flashStatus('NOTHING PLAYING', 'Reserve a song first');
+            else stopPlayback({ title: 'STOPPED', sub: reservedQueue.length ? `${plural(reservedQueue.length, 'song')} still reserved` : 'Queue is empty' });
+            break;
+
+        // Library modal
+        case 'close-library': closeLibrary(); break;
+        case 'tab-library': libraryView = 'library'; syncLibraryChrome(); renderLibrary(); break;
+        case 'tab-queue': libraryView = 'queue'; syncLibraryChrome(); renderLibrary(); break;
+        case 'mode': libraryMode = data.mode; syncLibraryChrome(); renderLibrary(); break;
+        case 'clear-search': $('library-search').value = ''; renderLibrary(); $('library-search').focus(); break;
+        case 'reserve-song': {
+            const song = findSong(data.code);
+            if (!song) { beep('error'); break; }
+            reserveSong(song);
+            const btn = document.querySelector(`#library-list [data-action="reserve-song"][data-code="${song.code}"]`);
+            if (btn) {
+                btn.textContent = 'Reserved ✓';
+                btn.classList.add('done');
+                setTimeout(() => { btn.textContent = 'Reserve'; btn.classList.remove('done'); }, 1000);
+            }
+            break;
+        }
+        case 'queue-remove': {
+            const i = Number(data.idx);
+            if (reservedQueue[i]) { reservedQueue.splice(i, 1); updateQueueUi(); }
+            break;
+        }
+        case 'queue-play': {
+            const i = Number(data.idx);
+            const song = reservedQueue[i];
+            if (song) {
+                reservedQueue.splice(i, 1);
+                closeLibrary();
+                showPage('player');
+                beginSong(song);
+            }
+            break;
+        }
+        case 'queue-clear': reservedQueue = []; updateQueueUi(); break;
+        default: break;
+    }
+}
+
+// ============================================================================
+// SOUNDFONT LOADER (download progress + 24-hour cache) and BOOT OVERLAY
+// ============================================================================
+const SF_CACHE_NAME = 'maruya-sf2-v1';
+const SF_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-download the SF2 after 24 hours
+let soundfontBlob = null; // the loaded SF2 bytes, hand this to your synth engine
+
+/** Resolves the cache key (always the local SF2 path, even if fetched from the live server). */
+function sfCacheKey() {
+    try { return new URL(SOUNDFONT_FILE, location.href).href; } catch (e) { return SOUNDFONT_FILE; }
+}
+
+/** Returns { res, fresh } for the cached SF2 (or null). Cache API needs https or localhost. */
+async function sfCacheGet() {
+    if (!('caches' in window)) return null;
+    try {
+        const cache = await caches.open(SF_CACHE_NAME);
+        const res = await cache.match(sfCacheKey());
+        if (!res) return null;
+        const at = parseInt(res.headers.get('x-cached-at'), 10) || 0;
+        return { res, fresh: at > 0 && (Date.now() - at) < SF_CACHE_TTL_MS };
+    } catch (e) { return null; }
+}
+
+async function sfCachePut(blob) {
+    if (!('caches' in window)) return;
+    try {
+        const cache = await caches.open(SF_CACHE_NAME);
+        await cache.put(sfCacheKey(), new Response(blob, { headers: { 'Content-Type': 'application/octet-stream', 'x-cached-at': String(Date.now()) } }));
+        if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    } catch (e) { console.warn('SF2 cache write failed:', e); }
+}
+
+/** Sanity check: real SoundFont files are RIFF containers with a "sfbk" form type. */
+async function isSoundfont(blob) {
+    if (!blob || blob.size < 65536) return false;
+    try {
+        const h = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+        const t = String.fromCharCode(...h);
+        return t.slice(0, 4) === 'RIFF' && t.slice(8, 12) === 'sfbk';
+    } catch (e) { return false; }
+}
+
+/** Streams a file and reports progress. The timeout only covers the connection, not the whole download. */
+async function downloadWithProgress(url, onProgress) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    let res;
+    try { res = await fetch(url, { cache: 'no-store', signal: ctrl.signal }); }
+    finally { clearTimeout(timer); }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const total = parseInt(res.headers.get('Content-Length'), 10) || 0;
+    if (!res.body || !res.body.getReader) {
+        const b = await res.blob();
+        onProgress(b.size, b.size);
+        return b;
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        onProgress(received, total);
+    }
+    return new Blob(chunks, { type: 'application/octet-stream' });
+}
+
+const fmtMB = (bytes) => (bytes / 1048576).toFixed(1) + ' MB';
+
+/**
+ * Loads the SF2: fresh cache (under 24 h) first, otherwise download (local copy,
+ * then live server). If the download fails, an expired cached copy is still used.
+ * onUpdate({ pct, text }) drives the loading overlay.
+ */
+async function loadSoundfont(onUpdate) {
+    Object.assign(sfState, { status: 'checking', size: '', source: '' });
+    renderSoundfontStatus();
+    onUpdate({ pct: 0.02, text: 'Checking cache…' });
+
+    const cached = await sfCacheGet();
+    let staleBlob = null;
+    if (cached) {
+        try {
+            const blob = await cached.res.blob();
+            if (await isSoundfont(blob)) {
+                if (cached.fresh) {
+                    soundfontBlob = blob;
+                    Object.assign(sfState, { status: 'found', size: fmtMB(blob.size), source: 'cache' });
+                    renderSoundfontStatus();
+                    onUpdate({ pct: 1, text: 'Cached • ' + fmtMB(blob.size), ok: true });
+                    return { ok: true };
+                }
+                staleBlob = blob; // expired, keep only as a fallback
+            }
+        } catch (e) { /* fall through to download */ }
+    }
+
+    const candidates = [{ url: sfCacheKey(), source: 'local' }];
+    if (SOUNDFONT_REMOTE_FALLBACK !== candidates[0].url) candidates.push({ url: SOUNDFONT_REMOTE_FALLBACK, source: 'remote' });
+
+    for (const c of candidates) {
+        try {
+            onUpdate({ pct: 0.03, text: 'Connecting…' });
+            const blob = await downloadWithProgress(c.url, (got, total) => {
+                if (total) onUpdate({ pct: Math.min(0.99, got / total), text: `${Math.floor(got / total * 100)}% • ${fmtMB(got)} / ${fmtMB(total)}` });
+                else onUpdate({ pct: 0.5, text: `Downloading • ${fmtMB(got)}` });
+            });
+            if (!(await isSoundfont(blob))) throw new Error('not a valid SF2');
+            soundfontBlob = blob;
+            await sfCachePut(blob);
+            Object.assign(sfState, { status: 'found', url: c.url, size: fmtMB(blob.size), source: c.source });
+            renderSoundfontStatus();
+            onUpdate({ pct: 1, text: 'Downloaded • ' + fmtMB(blob.size), ok: true });
+            return { ok: true };
+        } catch (err) {
+            console.warn('SF2 download failed:', c.url, err);
+        }
+    }
+
+    if (staleBlob) {
+        soundfontBlob = staleBlob;
+        Object.assign(sfState, { status: 'found', size: fmtMB(staleBlob.size), source: 'cache' });
+        renderSoundfontStatus();
+        onUpdate({ pct: 1, text: 'Offline copy • ' + fmtMB(staleBlob.size), ok: true, warn: true });
+        return { ok: true };
+    }
+    Object.assign(sfState, { status: 'missing', size: '' });
+    renderSoundfontStatus();
+    onUpdate({ pct: 1, text: 'Not found', bad: true });
+    return { ok: false };
+}
+
+// ---------- Boot overlay ----------
+const boot = { song: 0, sf: 0, synth: 0, sfBad: false };
+
+function setBootRow(key, { pct, text, state }) {
+    if (pct != null) { boot[key] = pct; $(`boot-${key}-fill`).style.width = (pct * 100).toFixed(1) + '%'; }
+    if (text != null) $(`boot-${key}-text`).textContent = text;
+    if (state) {
+        const row = $(`boot-row-${key}`);
+        row.dataset.state = state;
+        const icon = { pending: 'fa-spinner fa-spin', done: 'fa-check', warn: 'fa-triangle-exclamation', bad: 'fa-xmark' }[state];
+        row.querySelector('.boot-ico i').className = 'fa-solid ' + icon;
+    }
+    const total = Math.round((boot.song * 0.2 + boot.sf * 0.7 + boot.synth * 0.1) * 100);
+    $('boot-pct').textContent = total + '%';
+    $('boot-fill').style.width = total + '%';
+}
+
+async function startBoot(dbPromise) {
+    const launch = $('boot-launch');
+    engine.prepare(); // start loading the synth module while the SF2 downloads
+    $('boot-label').textContent = 'Loading…';
+
+    // Song library: the index fetch has no byte progress, so ease towards 90% until it finishes
+    const ease = setInterval(() => { if (boot.song < 0.9) setBootRow('song', { pct: boot.song + (0.9 - boot.song) * 0.08 }); }, 200);
+    const songTask = dbPromise.then(() => {
+        clearInterval(ease);
+        if (dbState.status === 'ready') setBootRow('song', { pct: 1, state: 'done', text: plural(dbState.count, 'song') });
+        else setBootRow('song', { pct: 1, state: 'warn', text: 'Offline demo • ' + plural(dbState.count, 'song') });
+    }).catch(() => { clearInterval(ease); setBootRow('song', { pct: 1, state: 'bad', text: 'Failed' }); });
+
+    // SoundFont
+    const sfTask = loadSoundfont((u) => {
+        setBootRow('sf', { pct: u.pct, text: u.text, state: u.bad ? 'bad' : (u.warn ? 'warn' : (u.ok ? 'done' : 'pending')) });
+    }).then((r) => { boot.sfBad = !r.ok; }).catch(() => { boot.sfBad = true; setBootRow('sf', { pct: 1, state: 'bad', text: 'Failed' }); });
+
+    await Promise.all([songTask, sfTask]);
+
+    // Synth engine: build the synthesizer from the downloaded SF2
+    setBootRow('synth', { pct: 0.1, text: 'Starting…' });
+    engine.onProgress = (pct, text) => setBootRow('synth', { pct: pct / 100, text });
+    try {
+        const ok = await engine.init(soundfontBlob);
+        if (ok) setBootRow('synth', { pct: 1, state: 'done', text: 'Ready' });
+        else { boot.sfBad = true; setBootRow('synth', { pct: 1, state: 'warn', text: 'Basic GM sounds' }); }
+    } catch (e) {
+        console.warn('Synth init failed:', e);
+        boot.sfBad = true;
+        setBootRow('synth', { pct: 1, state: 'bad', text: 'Failed' });
+    }
+    soundfontBlob = null; // the synth keeps its own copy, free the download
+
+    $('boot-label').textContent = boot.sfBad ? 'Ready (basic sound)' : 'Everything is ready';
+    $('boot-hint').textContent = boot.sfBad ? 'SoundFont unavailable. Basic sounds will be used.' : 'Tap Launch to start singing!';
+    launch.disabled = false;
+    launch.addEventListener('click', () => {
+        getAudioCtx(); // unlock audio inside this user gesture
+        const el = $('boot');
+        el.classList.add('boot-out');
+        setTimeout(() => el.remove(), 600);
+    }, { once: true });
+}
+
+// ============================================================================
+// INIT
+// ============================================================================
+function init() {
+    loadPrefs();
+    initVisuals();
+
+    // Clock + network
+    updateClock();
+    setInterval(updateClock, 1000);
+    updateNetworkIcon();
+    window.addEventListener('online', updateNetworkIcon);
+    window.addEventListener('offline', updateNetworkIcon);
+
+    // One delegated click handler for all [data-action] buttons
+    $('app').addEventListener('click', (e) => {
+        const el = e.target.closest('[data-action]');
+        if (el) dispatch(el.dataset.action, el.dataset);
+    });
+
+    // Library search (debounced)
+    $('library-search').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(renderLibrary, 120);
+        $('library-clear').classList.toggle('hidden', !$('library-search').value);
+    });
+
+    // Settings toggles
+    $('opt-voice').addEventListener('change', (e) => { prefs.voice = e.target.checked; savePrefs(); });
+    $('opt-beep').addEventListener('change', (e) => { prefs.beep = e.target.checked; savePrefs(); });
+
+    // Physical keyboard support (handy on desktop / tablets)
+    document.addEventListener('keydown', (e) => {
+        const modalOpen = !$('library-modal').classList.contains('hidden');
+        if (e.key === 'Escape') { if (modalOpen) closeLibrary(); else if (currentPage === 'player') showPage('landing'); return; }
+        if (modalOpen || currentPage !== 'player' || e.ctrlKey || e.metaKey || e.altKey) return;
+        if (/^[0-9]$/.test(e.key)) dispatch('digit', { value: e.key });
+        else if (e.key === 'Enter') dispatch('res');
+        else if (e.key === 'Backspace') dispatch('can');
+        else if (e.key === ' ') { e.preventDefault(); dispatch('play'); }
+    });
+
+    // Don't burn CPU on the particle canvas while the tab is hidden
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) fxStop();
+        else if (currentPage === 'player') fxStart();
+    });
+
+    renderCode();
+    renderAudioState();
+    renderTransport();
+    updateQueueUi();
+    renderSettings();
+    renderEngineSettings();
+    $('remote-room-code').textContent = remoteRoomCode;
+    window.addEventListener('load', connectRemoteReceiver, { once: true });
+    renderStatus();
+
+    // On load: fetch the song index (API first, then library listing, then mock data)
+    const dbPromise = loadSongDatabase();
+    startBoot(dbPromise);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
