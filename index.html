@@ -125,8 +125,7 @@
 
     <!-- DISPLAY STAGE (BGV + LYRICS) -->
     <div id="display-stage" class="relative w-full flex-1 overflow-hidden bg-[#1a2e40]">
-        <video id="bgv-video" src="https://maruyatvph.com/megaoke/bgv/Motion/motion1.mp4" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover z-0">
-            </video>
+        <video id="bgv-video" src="https://maruyatvph.com/megaoke/bgv/Motion/motion1.mp4" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover z-0"></video>
         <img id="bgv-image" src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1000&q=80" alt="BG" class="absolute inset-0 w-full h-full object-cover z-0 hidden">
 
         <!-- TOP STATUS & QUEUE STRIP -->
@@ -428,8 +427,6 @@
     }, { once: true });
 
     // ---------- 24-hour asset cache (SoundFont, IDX catalog, IDX song blocks) ----------
-    // Cache API entries carry an x-maruya-cached-at stamp; entries older than 24 h are refreshed from the
-    // server, and if the server is unreachable the stale copy is still used (offline friendly).
     const ASSET_CACHE_NAME = 'maruya-assets-v1';
     const ASSET_TTL = 24 * 60 * 60 * 1000;
     const assetKey = (path) => new URL(path, location.href).href;
@@ -559,7 +556,6 @@
             this.masterVol = v;
             if (this.masterGain) this.masterGain.gain.setTargetAtTime(v / 100, this.ctx.currentTime, 0.02);
         }
-        // Effective MIDI CC7 = song's own CC7 x (melody or music slider)
         effVol(ch) {
             ch &= 15;
             const base = this.chVolumes[ch] ?? 100;
@@ -594,7 +590,6 @@
                 this.limiter.attack.value = 0.002;
                 this.limiter.release.value = 0.15;
 
-                // Makeup gain: SF2 output is quiet, so lift it (~+8 dB) before the limiter; a soft clipper catches stray peaks.
                 this.boostGain = this.ctx.createGain();
                 this.boostGain.gain.value = OUTPUT_BOOST;
                 this.softClip = this.ctx.createWaveShaper();
@@ -624,20 +619,17 @@
             return !!this.spessaSynth;
         }
 
-        // Output latency of the device (seconds) - used to delay the lyrics so they match what is heard.
         outputLatency() {
             const c = this.ctx;
             if (!c) return 0;
             return Math.max(0, Math.min(0.35, (c.outputLatency || 0) + (c.baseLatency || 0)));
         }
 
-        // SoundFont download with real progress, cached for 24 hours.
         async downloadSoundFont(onBytes) {
             const CACHE_NAME = 'maruya-sf2-cache-v1';
             const MAX_AGE = 24 * 60 * 60 * 1000;
             let cache = null;
 
-            // 0) SoundFont stored in the offline "maruyaoke/sf2" folder (no expiry, works offline)
             try {
                 await offline.ready;
                 const local = await offline.pickSoundFont();
@@ -697,7 +689,6 @@
 
             if (cache && buffer.byteLength > 1024) {
                 try {
-                    // Awaited before the buffer is handed to the synth (the synth may transfer/detach it).
                     await cache.put(SOUNDFONT_URL, new Response(buffer, {
                         status: 200,
                         headers: { 'Content-Type': 'application/octet-stream', 'x-maruya-cached-at': String(Date.now()) }
@@ -716,25 +707,19 @@
             this.sfState = 'loading';
             refreshEngineBadge();
             try {
-                // Local vendor files first (offline), CDN only as an online fallback.
                 const ensureCoreMap = async () => {
                     if (window.__coreMapDone) return; window.__coreMapDone = true;
                     let target = 'https://cdn.jsdelivr.net/npm/spessasynth_core@4/+esm';
-                    try {
-                        const r = await fetch('./vendor/spessasynth_core.mjs', { method: 'HEAD', cache: 'no-store' });
-                        if (r.ok && !/text\/html/i.test(r.headers.get('Content-Type') || '')) target = new URL('./vendor/spessasynth_core.mjs', location.href).href;
-                    } catch (e) {}
                     const sc = document.createElement('script'); sc.type = 'importmap';
                     sc.textContent = JSON.stringify({ imports: { spessasynth_core: target } });
                     document.head.appendChild(sc);
                 };
                 const loadModule = async () => {
-                    try { await ensureCoreMap(); return await import('./vendor/spessasynth_lib.mjs'); }
-                    catch (e) { console.warn('Local spessasynth_lib.mjs unavailable, using CDN:', e); return import('https://cdn.jsdelivr.net/npm/spessasynth_lib@4.4.0/+esm'); }
+                    try { await ensureCoreMap(); return await import('https://cdn.jsdelivr.net/npm/spessasynth_lib@4.4.0/+esm'); }
+                    catch (e) { console.warn('CDN unavailable:', e); throw e; }
                 };
                 const loadWorklet = async () => {
-                    try { await this.ctx.audioWorklet.addModule('./vendor/spessasynth_processor.min.js'); }
-                    catch (e) { console.warn('Local spessasynth_processor.min.js unavailable, using CDN:', e); await this.ctx.audioWorklet.addModule('https://cdn.jsdelivr.net/npm/spessasynth_lib@4.4.0/dist/spessasynth_processor.min.js'); }
+                    await this.ctx.audioWorklet.addModule('https://cdn.jsdelivr.net/npm/spessasynth_lib@4.4.0/dist/spessasynth_processor.min.js');
                 };
                 const prep = Promise.all([loadModule(), loadWorklet()]);
                 prep.catch(() => {});
@@ -795,7 +780,7 @@
             if (this.spessaSynth) {
                 for (let ch = 0; ch < 16; ch++) {
                     try {
-                        this.spessaSynth.controllerChange(ch, 121, 0);  // reset all controllers (also bank select)
+                        this.spessaSynth.controllerChange(ch, 121, 0); 
                         this.spessaSynth.pitchWheel(ch, 8192);
                         this.spessaSynth.programChange(ch, 0);
                     } catch (e) {}
@@ -811,8 +796,8 @@
             try { this.spessaSynth.stopAll(true); } catch (e) { console.warn('MIDI panic failed', e); }
             for (let ch = 0; ch < 16; ch++) {
                 try {
-                    this.spessaSynth.controllerChange(ch, 64, 0);   // sustain off
-                    this.spessaSynth.controllerChange(ch, 123, 0);  // all notes off
+                    this.spessaSynth.controllerChange(ch, 64, 0);
+                    this.spessaSynth.controllerChange(ch, 123, 0);
                 } catch (e) {}
             }
         }
@@ -829,7 +814,6 @@
             if (this.spessaSynth) { try { this.spessaSynth.controllerChange(ch & 15, cc & 127, val & 127); } catch (e) {} }
         }
 
-        // Returns the key that was actually played (needed for noteOff) or null.
         noteOn(ch, note, vel, durSec = 0.35) {
             this.initContext();
             const channel = ch & 15;
@@ -1037,7 +1021,6 @@
             p = end;
         }
 
-        // Lyrics: prefer lyric events, else text events. Ignore @-headers (KAR: @T, @K, @L ...)
         const lyr = rawLyricEvents.filter(e => !e.text.startsWith('@'));
         const txt = rawTextEvents.filter(e => !e.text.startsWith('@'));
         const chosen = (lyr.length >= 4 ? lyr : txt).slice();
@@ -1103,7 +1086,6 @@
         return lo;
     }
 
-    // Finds the melody channel and aligns lyric timing to its notes.
     function analyzeAndSyncLyrics(lines, notes, controls, ppqn) {
         const sylls = [];
         lines.forEach(l => l.syllables.forEach(s => sylls.push(s)));
@@ -1181,10 +1163,9 @@
         return { sync, melodyChannels: melody ? new Set([melody.ch]) : null };
     }
 
-    // Inflate with pako when present, otherwise the browser's native DecompressionStream (no vendor file needed).
     async function inflateAny(u8, format) {
         if (window.pako) return format === 'deflate' ? window.pako.inflate(u8) : window.pako.inflateRaw(u8);
-        if (typeof DecompressionStream === 'undefined') throw new Error('No decompressor available (add vendor/pako.min.js)');
+        if (typeof DecompressionStream === 'undefined') throw new Error('No decompressor available');
         const ds = new DecompressionStream(format === 'deflate' ? 'deflate' : 'deflate-raw');
         const out = new Response(new Blob([u8]).stream().pipeThrough(ds));
         return new Uint8Array(await out.arrayBuffer());
@@ -1203,7 +1184,6 @@
         return parseRawMidiBytes(raw);
     }
 
-    // Builds karaoke lines. Handles KAR markers: "/" = new line, "\" = new page, plus "\n".
     function buildKaraokeLines(events, ppqn) {
         const lines = [];
         let cur = null;
@@ -1228,7 +1208,6 @@
                 if (cur && cur.syllables.length) {
                     const last = cur.syllables[cur.syllables.length - 1];
                     const chars = cur.syllables.reduce((a, s) => a + s.text.length, 0);
-                    // Safety breaks for files without explicit markers: long rest or very long line
                     if (evt.tick - last.startTick > ppqn * 4 || (chars > 30 && (/\s$/.test(last.text) || /^\s/.test(t)))) pushLine();
                 }
                 if (!cur) cur = { syllables: [] };
@@ -1251,7 +1230,7 @@
     }
 
     // =====================================================================
-    //  LYRICS CONDUCTOR - 4 rows, shown as two alternating pairs
+    //  LYRICS CONDUCTOR
     // =====================================================================
     class KaraokeLyricsConductor {
         constructor() {
@@ -1338,10 +1317,7 @@
     }
 
     // =====================================================================
-    //  OFFLINE STORAGE  -  folder "maruyaoke"  (midi/  sf2/  voice/  data/)
-    //  1) App storage (OPFS): the folder is created automatically.
-    //  2) Optional real device folder (desktop Chrome/Edge): "maruyaoke" is created inside the folder you pick.
-    //  3) IndexedDB fallback for browsers without writable OPFS.
+    //  OFFLINE STORAGE
     // =====================================================================
     const OFFLINE_ROOT = 'maruyaoke';
     const OFFLINE_SUBS = ['midi', 'sf2', 'voice', 'data'];
@@ -1409,8 +1385,8 @@
     const offline = {
         backend: 'none',            // 'opfs' | 'idb' | 'none'
         opfsRoot: null,
-        linkedHandle: null,         // saved device folder (may need permission)
-        linkedRoot: null,           // device folder with permission granted
+        linkedHandle: null,
+        linkedRoot: null,
         linkedName: '',
         autoCache: localStorage.getItem(AUTOCACHE_KEY) !== '0',
         ready: null,
@@ -1440,7 +1416,7 @@
                 let p = await h.queryPermission({ mode: 'readwrite' });
                 if (p !== 'granted' && request) p = await h.requestPermission({ mode: 'readwrite' });
                 if (p === 'granted') { this.linkedRoot = h; return true; }
-            } catch (e) { console.warn('Folder permission:', e); }
+            } catch (e) {}
             this.linkedRoot = null;
             return false;
         },
@@ -1532,14 +1508,13 @@
         refreshEngineBadge();
     }
 
-    // Keep a copy of a played song in maruyaoke/midi
     async function saveSongOffline(song, buf) {
         try {
             const m = (song.url || '').split('#')[0].split('?')[0].match(/\.([a-z0-9]+)$/i);
             const ext = m && /^(mid|midi|kar|raw|bin|dat)$/i.test(m[1]) ? m[1].toLowerCase() : 'mid';
             const name = safeName(`${song.code} - ${song.name} - ${song.artistName}.${ext}`);
             if (await offline.write('midi', name, buf)) song.localFile = name;
-        } catch (e) { console.warn('Could not save song offline:', e); }
+        } catch (e) {}
     }
 
     // ---------- Offline panel ----------
@@ -1554,8 +1529,8 @@
         $('off-location').textContent = offline.linkedRoot ? `Device folder: ${offline.linkedName}/`
             : needsAccess ? `Device folder "${offline.linkedName}" needs permission`
             : offline.backend === 'opfs' ? 'Auto-created inside the app (works offline)'
-            : offline.backend === 'idb' ? 'Saved in the browser database (no folder access in this browser)'
-            : 'Offline storage is not available in this browser';
+            : offline.backend === 'idb' ? 'Saved in the browser database'
+            : 'Offline storage is not available';
         $('off-allow-btn').classList.toggle('hidden', !needsAccess);
 
         const linkBtn = $('off-link-btn');
@@ -1585,16 +1560,8 @@
                         ${active && active.name === f.name ? '<span class="text-[10px] font-black text-emerald-300 px-2 py-1">ACTIVE</span>' : `<button onclick="useSf2(${i})" class="k-btn k-green text-[10px] font-bold text-white px-2 py-1">USE</button>`}
                         <button onclick="deleteSf2(${i})" class="k-btn k-can text-[10px] font-bold text-white px-2 py-1"><i class="fas fa-trash"></i></button>
                     </div>
-                </div>`).join('') || '<div class="text-[11px] text-white/40">No SoundFont saved yet. It downloads automatically on the first online start, or import your own.</div>';
-        } catch (e) { console.warn(e); }
-
-        try {
-            if (navigator.storage && navigator.storage.estimate) {
-                const est = await navigator.storage.estimate();
-                $('off-usage').textContent = `App storage used: ${((est.usage || 0) / 1048576).toFixed(1)} MB`;
-            }
+                </div>`).join('') || '<div class="text-[11px] text-white/40">No SoundFont saved yet. It downloads automatically on the first online start.</div>';
         } catch (e) {}
-        updateInstallUI();
     }
 
     async function importFiles(kind, input) {
@@ -1607,8 +1574,7 @@
         for (const f of files) {
             if (!okRe.test(f.name)) { bad++; continue; }
             try { if (await offline.write(sub, f.name, f)) { n++; lastName = safeName(f.name); } else bad++; }
-            catch (e) { bad++; console.warn('Import failed:', f.name, e); }
-            if (files.length > 20 && (n + bad) % 10 === 0) offStatus(`Importing… ${n + bad}/${files.length}`);
+            catch (e) { bad++; }
         }
         offStatus(`Imported ${n} file${n === 1 ? '' : 's'}${bad ? `, skipped ${bad}` : ''}.`);
         if (kind === 'sf2' && n) {
@@ -1635,7 +1601,7 @@
         refreshOfflinePanel();
     }
     async function clearOfflineSongs() {
-        if (!confirm('Delete ALL songs saved in the offline folder (including files you imported)?')) return;
+        if (!confirm('Delete ALL songs saved in the offline folder?')) return;
         const list = await offline.list('midi');
         for (const f of list) await offline.remove('midi', f.name);
         await rebuildSongDatabase();
@@ -1650,9 +1616,9 @@
     async function toggleLinkFolder() {
         try {
             if (offline.linkedHandle) { await offline.unlinkDeviceFolder(); offStatus('Device folder unlinked.'); }
-            else if (await offline.linkDeviceFolder()) offStatus('Linked. Put MIDI in maruyaoke/midi and SoundFonts in maruyaoke/sf2.');
+            else if (await offline.linkDeviceFolder()) offStatus('Linked.');
             await rebuildSongDatabase();
-        } catch (e) { if (e && e.name !== 'AbortError') offStatus('Could not link folder: ' + (e.message || e)); }
+        } catch (e) { }
         refreshOfflinePanel();
     }
     async function allowFolderAccess() {
@@ -1675,7 +1641,7 @@
         const hint = document.getElementById('off-install-hint');
         if (boot) boot.classList.toggle('hidden', !can);
         if (wrap) wrap.classList.toggle('hidden', !can);
-        if (hint) hint.textContent = (!deferredInstall && isIOS) ? 'On iPhone/iPad: tap Share, then "Add to Home Screen".' : 'Installs Maruya Videoke as an app that also opens offline.';
+        if (hint) hint.textContent = (!deferredInstall && isIOS) ? 'On iPhone/iPad: tap Share, then "Add to Home Screen".' : 'Installs Maruya Videoke as an app.';
     }
     async function installApp() {
         if (deferredInstall) {
@@ -1691,7 +1657,7 @@
     window.addEventListener('appinstalled', () => { deferredInstall = null; updateInstallUI(); });
     window.addEventListener('DOMContentLoaded', updateInstallUI);
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-        window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service worker failed:', err)));
+        window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
     }
 
     // =====================================================================
@@ -1712,7 +1678,6 @@
     let currentModalTab = "TITLE";
     let lyricOffsetMs = 0;
 
-    // Song clock (song-seconds). Independent from frame rate, follows TEM changes and pause.
     const clock = {
         sec: 0, wall: 0, running: false,
         now() { return this.running ? this.sec + (performance.now() - this.wall) / 1000 * soundEngine.tempoRate : this.sec; },
@@ -1746,145 +1711,132 @@
     const CODE_LENGTH = 6;
     const SECTOR = 2048;
     const hexToBytes = (h) => Uint8Array.from(h.match(/../g), (x) => parseInt(x, 16));
-// ---- Catalog (shubidx) reader ----
-const u16 = (b, i) => b[i] | (b[i + 1] << 8);
-const u32 = (b, i) => (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> 0;
-const isValidIndexStart = (b, i) => i > 0 && i < b.length && (((b[i] >= 1 && b[i] <= 7)) || b[i] === 9);
+    const u16 = (b, i) => b[i] | (b[i + 1] << 8);
+    const u32 = (b, i) => (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> 0;
+    const isValidIndexStart = (b, i) => i > 0 && i < b.length && (((b[i] >= 1 && b[i] <= 7)) || b[i] === 9);
 
-function idxDetectStart(b) {
-    if (b.length < 60) return 8608;
-    const a = u32(b, 24), c1 = u32(b, 52), c2 = u32(b, 56);
-    const pick = (c1 > a && isValidIndexStart(b, c1) && (c2 <= a || !isValidIndexStart(b, c2))) ? c1 : c2;
-    if (isValidIndexStart(b, pick)) return pick;
-    for (let i = 56; i < Math.min(b.length - 4, 16384); i++) {
-        const t = b[i];
-        if ((t === 7 || t === 4 || t === 6) && i + 1 < b.length && b[i + 1] > 2 && b[i + 1] + i < b.length) return i;
-    }
-    return 8608;
-}
-
-/** Parses shubidx into [{ code, name, artistName, pos, size }] (pos/size in 2048-byte sectors). */
-function idxParseCatalog(b) {
-    const cp = new TextDecoder('windows-1252');
-    const text = (from, len) => cp.decode(b.subarray(from, from + Math.max(0, len))).replace(/\u0000/g, '').trim();
-    const start = idxDetectStart(b);
-    const singers = [], songs = [];
-    let i = start;
-    while (i < b.length) {
-        const t = b[i];
-        if (t === 0) { i++; continue; }
-        if (t === 9) { i += 4; continue; }
-        if (i + 2 > b.length) break;
-        const len = b[i + 1];
-        if (len < 2) break;
-        const rec = i, end = i + len;
-        if (end > b.length) break;
-        i = end;
-        if (t === 5) singers.push(text(rec + 5, len - 5));
-        else if (t === 1) {
-            const lang2 = (b[rec + 3] & 128) !== 0;
-            const a = u16(b, rec + 4), s = u16(b, rec + 6);
-            const bigSinger = a === 65535;
-            let singerIdx = a & 16383, size = s;
-            const pos = u32(b, rec + 8);
-            let titleAt, titleLen;
-            if (lang2) { titleLen = Math.max(0, (len - 2) - 16 - ((s === 65534 ? 4 : 0) + (u16(b, rec + 16) === 65534 ? 4 : 0))); titleAt = rec + 18; }
-            else { titleLen = Math.max(0, (len - 2) - 10 - ((bigSinger ? 4 : 0) + (s === 65534 ? 4 : 0))); titleAt = rec + 12; }
-            const title = text(titleAt, titleLen);
-            let p = titleAt + titleLen;
-            if (bigSinger && p + 4 <= end) { singerIdx = u32(b, p); p += 4; }
-            if (s === 65534 && p + 4 <= end) size = u32(b, p);
-            songs.push({ title, singerIdx, pos, size, number: '' });
+    function idxDetectStart(b) {
+        if (b.length < 60) return 8608;
+        const a = u32(b, 24), c1 = u32(b, 52), c2 = u32(b, 56);
+        const pick = (c1 > a && isValidIndexStart(b, c1) && (c2 <= a || !isValidIndexStart(b, c2))) ? c1 : c2;
+        if (isValidIndexStart(b, pick)) return pick;
+        for (let i = 56; i < Math.min(b.length - 4, 16384); i++) {
+            const t = b[i];
+            if ((t === 7 || t === 4 || t === 6) && i + 1 < b.length && b[i + 1] > 2 && b[i + 1] + i < b.length) return i;
         }
+        return 8608;
     }
-    // Song numbers come last: one 4-byte "9" record per song, in song order.
-    let k = 0;
-    for (i = start; i < b.length;) {
-        if (b[i] === 9 && i + 4 <= b.length) {
-            if (k < songs.length) songs[k++].number = String(((b[i + 1] << 16) | (b[i + 3] << 8) | b[i + 2]) >>> 0).padStart(CODE_LENGTH, '0');
-            i += 4;
-        } else {
+
+    function idxParseCatalog(b) {
+        const cp = new TextDecoder('windows-1252');
+        const text = (from, len) => cp.decode(b.subarray(from, from + Math.max(0, len))).replace(/\u0000/g, '').trim();
+        const start = idxDetectStart(b);
+        const singers = [], songs = [];
+        let i = start;
+        while (i < b.length) {
+            const t = b[i];
+            if (t === 0) { i++; continue; }
+            if (t === 9) { i += 4; continue; }
             if (i + 2 > b.length) break;
-            const l = b[i + 1];
-            i += l < 2 ? 1 : l;
-        }
-    }
-    const rows = songs.map((s, n) => ({
-        code: s.number || String(n + 1).padStart(CODE_LENGTH, '0'),
-        name: s.title || 'Untitled', artistName: singers[s.singerIdx] || 'Unknown', pos: s.pos, size: s.size
-    }));
-    if (!rows.length) {
-        const head = Array.from(b.subarray(0, 64)).map((x) => x.toString(16).padStart(2, '0')).join('');
-        throw new Error(`shubidx has no songs (${b.length} bytes, start ${start}, first 64 bytes: ${head})`);
-    }
-    return rows;
-}
-
-// ---- Song block (shubblob) decryption ----
-// Same three keys the MaruyaOkerepacker tries, newest first.
-const SHUB_KEYS = [
-    ['b302d56b35890aa256e6f79ee2954c1b8682b1fcf28ca6e0409eb919eae23dea', 'e4f8b2c9e1a7d6f530e4b8a2c9f1d3e5'],
-    ['9eac94f7d1abf0c1e08e9f67d3a2f6fc45fda31d2477702dae565b259c49fe6b', '4a744e704f62417636373134402a2326'],
-    ['743e5fe3247edebe4f4639829beae9ac4d06049977c09cd4b5d275e6488d0f19', '284e3a6519df99b829472e39130792ea']
-].map(([k, v]) => ({ key: hexToBytes(k), iv: hexToBytes(v), ck: null }));
-let shubKeyHint = 0;
-
-/** AES-256-CBC decrypt with no padding. WebCrypto only does PKCS#7, so one extra block that decrypts to padding is appended and dropped again. */
-async function aesCbcNoPad(k, data) {
-    const sub = window.crypto && window.crypto.subtle;
-    if (!sub) throw new Error('Offline songs need a secure (https) page');
-    if (!k.ck) k.ck = await sub.importKey('raw', k.key, 'AES-CBC', false, ['encrypt', 'decrypt']);
-    const fake = new Uint8Array(await sub.encrypt({ name: 'AES-CBC', iv: data.subarray(data.length - 16) }, k.ck, new Uint8Array(0))).subarray(0, 16);
-    const full = new Uint8Array(data.length + 16);
-    full.set(data); full.set(fake, data.length);
-    return new Uint8Array(await sub.decrypt({ name: 'AES-CBC', iv: k.iv }, k.ck, full));
-}
-
-const isMthd = (u) => u.length >= 4 && u[0] === 0x4d && u[1] === 0x54 && u[2] === 0x68 && u[3] === 0x44;
-
-/** Block bytes -> MIDI bytes. Block: "MKMD", version 1, u32 midi length, u32 deflated length, AES data. */
-async function shubExtract(blk) {
-    if (blk.length >= 13 && blk[0] === 0x4d && blk[1] === 0x4b && blk[2] === 0x4d && blk[3] === 0x44 && blk[4] === 1) {
-        const clen = u32(blk, 9);
-        const take = Math.min((blk.length - 13) & ~15, (clen & ~15) + 16);
-        if (take >= 16) {
-            const enc = blk.subarray(13, 13 + take);
-            for (let n = 0; n < SHUB_KEYS.length; n++) {
-                const k = SHUB_KEYS[(shubKeyHint + n) % SHUB_KEYS.length];
-                try {
-                    const mid = await inflateAny((await aesCbcNoPad(k, enc)).subarray(0, clen), 'raw');
-                    if (isMthd(mid)) { shubKeyHint = (shubKeyHint + n) % SHUB_KEYS.length; return mid; }
-                } catch (e) { if (/secure/.test(e.message)) throw e; /* wrong key: try the next */ }
+            const len = b[i + 1];
+            if (len < 2) break;
+            const rec = i, end = i + len;
+            if (end > b.length) break;
+            i = end;
+            if (t === 5) singers.push(text(rec + 5, len - 5));
+            else if (t === 1) {
+                const lang2 = (b[rec + 3] & 128) !== 0;
+                const a = u16(b, rec + 4), s = u16(b, rec + 6);
+                const bigSinger = a === 65535;
+                let singerIdx = a & 16383, size = s;
+                const pos = u32(b, rec + 8);
+                let titleAt, titleLen;
+                if (lang2) { titleLen = Math.max(0, (len - 2) - 16 - ((s === 65534 ? 4 : 0) + (u16(b, rec + 16) === 65534 ? 4 : 0))); titleAt = rec + 18; }
+                else { titleLen = Math.max(0, (len - 2) - 10 - ((bigSinger ? 4 : 0) + (s === 65534 ? 4 : 0))); titleAt = rec + 12; }
+                const title = text(titleAt, titleLen);
+                let p = titleAt + titleLen;
+                if (bigSinger && p + 4 <= end) { singerIdx = u32(b, p); p += 4; }
+                if (s === 65534 && p + 4 <= end) size = u32(b, p);
+                songs.push({ title, singerIdx, pos, size, number: '' });
             }
         }
+        let k = 0;
+        for (i = start; i < b.length;) {
+            if (b[i] === 9 && i + 4 <= b.length) {
+                if (k < songs.length) songs[k++].number = String(((b[i + 1] << 16) | (b[i + 3] << 8) | b[i + 2]) >>> 0).padStart(CODE_LENGTH, '0');
+                i += 4;
+            } else {
+                if (i + 2 > b.length) break;
+                const l = b[i + 1];
+                i += l < 2 ? 1 : l;
+            }
+        }
+        const rows = songs.map((s, n) => ({
+            code: s.number || String(n + 1).padStart(CODE_LENGTH, '0'),
+            name: s.title || 'Untitled', artistName: singers[s.singerIdx] || 'Unknown', pos: s.pos, size: s.size
+        }));
+        if (!rows.length) throw new Error(`shubidx has no songs`);
+        return rows;
     }
-    if (isMthd(blk)) return blk; // stored unencrypted
-    throw new Error('could not decrypt song block');
-}
+
+    const SHUB_KEYS = [
+        ['b302d56b35890aa256e6f79ee2954c1b8682b1fcf28ca6e0409eb919eae23dea', 'e4f8b2c9e1a7d6f530e4b8a2c9f1d3e5'],
+        ['9eac94f7d1abf0c1e08e9f67d3a2f6fc45fda31d2477702dae565b259c49fe6b', '4a744e704f62417636373134402a2326'],
+        ['743e5fe3247edebe4f4639829beae9ac4d06049977c09cd4b5d275e6488d0f19', '284e3a6519df99b829472e39130792ea']
+    ].map(([k, v]) => ({ key: hexToBytes(k), iv: hexToBytes(v), ck: null }));
+    let shubKeyHint = 0;
+
+    async function aesCbcNoPad(k, data) {
+        const sub = window.crypto && window.crypto.subtle;
+        if (!sub) throw new Error('Secure context required');
+        if (!k.ck) k.ck = await sub.importKey('raw', k.key, 'AES-CBC', false, ['encrypt', 'decrypt']);
+        const fake = new Uint8Array(await sub.encrypt({ name: 'AES-CBC', iv: data.subarray(data.length - 16) }, k.ck, new Uint8Array(0))).subarray(0, 16);
+        const full = new Uint8Array(data.length + 16);
+        full.set(data); full.set(fake, data.length);
+        return new Uint8Array(await sub.decrypt({ name: 'AES-CBC', iv: k.iv }, k.ck, full));
+    }
+
+    const isMthd = (u) => u.length >= 4 && u[0] === 0x4d && u[1] === 0x54 && u[2] === 0x68 && u[3] === 0x44;
+
+    async function shubExtract(blk) {
+        if (blk.length >= 13 && blk[0] === 0x4d && blk[1] === 0x4b && blk[2] === 0x4d && blk[3] === 0x44 && blk[4] === 1) {
+            const clen = u32(blk, 9);
+            const take = Math.min((blk.length - 13) & ~15, (clen & ~15) + 16);
+            if (take >= 16) {
+                const enc = blk.subarray(13, 13 + take);
+                for (let n = 0; n < SHUB_KEYS.length; n++) {
+                    const k = SHUB_KEYS[(shubKeyHint + n) % SHUB_KEYS.length];
+                    try {
+                        const mid = await inflateAny((await aesCbcNoPad(k, enc)).subarray(0, clen), 'raw');
+                        if (isMthd(mid)) { shubKeyHint = (shubKeyHint + n) % SHUB_KEYS.length; return mid; }
+                    } catch (e) { }
+                }
+            }
+        }
+        if (isMthd(blk)) return blk;
+        throw new Error('decrypt failed');
+    }
 
 
     const IDX_URL_INDEX = HOSTINGER_BASE + 'idx/shubidx';
     const IDX_URL_BLOB = HOSTINGER_BASE + 'idx/shubblob';
-    // mode 'range': songs are read straight from the server with HTTP Range requests (tiny memory use).
-    // mode 'blob' : the whole file was downloaded (server without Range support).
     const idxState = { mode: '', ver: '', blob: null, size: 0, entries: new Map(), songs: [], error: '', loading: false };
     const idxHas = (code) => !!idxState.mode && idxState.entries.has(code);
 
     async function idxReadSector(pos, size) {
         const from = pos * SECTOR, to = (pos + size) * SECTOR;
         if (idxState.mode === 'blob') return new Uint8Array(await idxState.blob.slice(from, to).arrayBuffer());
-        // Played song blocks are kept 24 h; the key includes the file version so a replaced shubblob is never mixed up.
         const key = assetKey(`./idx/shubblob?v=${encodeURIComponent(idxState.ver || idxState.size)}&b=${pos}-${size}`);
         const hit = await assetCacheGet(key);
         if (hit) { try { const cb = new Uint8Array(await hit.arrayBuffer()); if (cb.length === to - from) return cb; } catch (e) {} }
         let buf;
         try {
-            const res = await fetch(IDX_URL_BLOB, { cache: 'no-store', headers: { Range: `bytes=${from}-${to - 1}` } });
-            if (res.status !== 206) throw new Error('server ignored Range request (HTTP ' + res.status + ')');
+            const res = await fetch(IDX_URL_BLOB, { mode: 'cors', cache: 'no-store', headers: { Range: `bytes=${from}-${to - 1}` } });
+            if (res.status !== 206) throw new Error('Range request failed');
             buf = new Uint8Array(await res.arrayBuffer());
-            if (buf.length !== to - from) throw new Error('short range read');
+            if (buf.length !== to - from) throw new Error('short read');
         } catch (e) {
-            const stale = await assetCacheGet(key, true); // offline: an expired copy is better than nothing
+            const stale = await assetCacheGet(key, true);
             if (stale) { const sb = new Uint8Array(await stale.arrayBuffer()); if (sb.length === to - from) return sb; }
             throw e;
         }
@@ -1898,27 +1850,25 @@ async function shubExtract(blk) {
         return mid.buffer.slice(mid.byteOffset, mid.byteOffset + mid.byteLength);
     }
 
-    /** Fetches one local IDX file. A web server that answers a missing file with a web page counts as "missing". */
     async function idxFetchLocal(url) {
         const key = assetKey(url);
-        const hit = await assetCacheGet(key); // fresh (< 24 h) copy
+        const hit = await assetCacheGet(key); 
         if (hit) { try { const hb = await hit.blob(); if (hb.size) return hb; } catch (e) {} }
         try {
             const res = await fetch(url, { mode: 'cors', cache: 'no-store' });
-            if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-            if (/text\/html/i.test(res.headers.get('Content-Type') || '')) throw new Error(`${url}: not found (server returned a web page)`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (/text\/html/i.test(res.headers.get('Content-Type') || '')) throw new Error(`Not found`);
             const blob = await res.blob();
-            if (!blob.size) throw new Error(`${url} is empty`);
+            if (!blob.size) throw new Error(`Empty`);
             assetCachePut(key, blob);
             return blob;
         } catch (e) {
-            const stale = await assetCacheGet(key, true); // server unreachable: use the expired copy
+            const stale = await assetCacheGet(key, true); 
             if (stale) { const sb = await stale.blob(); if (sb.size) return sb; }
             throw e;
         }
     }
 
-    /** Size + version tag of shubblob without downloading it ({size: 0} if unknown). */
     async function idxBlobSize() {
         try {
             const r = await fetch(IDX_URL_BLOB, { method: 'HEAD', mode: 'cors', cache: 'no-store' });
@@ -1928,13 +1878,11 @@ async function shubExtract(blk) {
             try { localStorage.setItem('maruya-idx-meta', JSON.stringify(meta)); } catch (e) {}
             return meta;
         } catch (e) {
-            // offline: reuse the size/version seen last time so cached song blocks keep working
             try { const m = JSON.parse(localStorage.getItem('maruya-idx-meta') || 'null'); if (m && m.size) return m; } catch (e2) {}
             return { size: 0, ver: '' };
         }
     }
 
-    /** Loads the local IDX pair in the background. Resolves { songs, count } or throws; no half-loaded state. */
     async function loadIdxLocal() {
         idxState.loading = true;
         try {
@@ -1944,12 +1892,12 @@ async function shubExtract(blk) {
             const bi = await idxBlobSize();
             let size = bi.size;
             idxState.ver = bi.ver;
-            const probe = async () => { // is Range really supported? (reads the first song's block)
+            const probe = async () => { 
                 const r = rows.find((x) => x.size > 0);
                 if (!r) return false;
                 try { idxState.mode = 'range'; await idxReadSector(r.pos, r.size); return true; } catch (e) { return false; } finally { idxState.mode = ''; }
             };
-            if (!size || !(await probe())) { // no Range support: download the whole file once
+            if (!size || !(await probe())) { 
                 mode = 'blob';
                 blob = await idxFetchLocal(IDX_URL_BLOB);
                 size = blob.size;
@@ -1960,23 +1908,22 @@ async function shubExtract(blk) {
                 entries.set(r.code, { pos: r.pos, size: r.size });
                 songs.push({ code: r.code, name: r.name, artistName: r.artistName, url: '' });
             }
-            if (!songs.length) throw new Error(`shubblob (${(size / 1048576).toFixed(1)} MB) does not match shubidx (${rows.length} songs): use files from the same library set`);
+            if (!songs.length) throw new Error(`Invalid IDX`);
             Object.assign(idxState, { mode, blob, size, entries, songs, error: '' });
             const first = entries.get(songs[0].code);
             try { await shubExtract(await idxReadSector(first.pos, first.size)); }
-            catch (e) { idxState.mode = ''; throw new Error('first IDX song cannot be decrypted: ' + e.message); }
+            catch (e) { idxState.mode = ''; throw new Error('Decryption failed'); }
             return { songs, count: songs.length };
         } finally { idxState.loading = false; }
     }
 
     // ---------- Song library ----------
-    // Local MIDI folder: ./songs/ (directory listing, or a songs/index.json list).
     async function loadLocalSongsFolder() {
         for (const src of [HOSTINGER_BASE + 'songs/index.json', HOSTINGER_BASE + 'songs/']) {
             try {
                 const list = (await fetchSongList(src)).filter(x => x && x.url);
                 if (list.length) return list;
-            } catch (e) { /* try next */ }
+            } catch (e) { }
         }
         return [];
     }
@@ -2001,7 +1948,6 @@ async function shubExtract(blk) {
     function normalizeJsonSong(item, dir, index) {
         const rawUrl = item.url || item.file || item.filename || item.path || '';
         let url = '';
-        // Explicitly resolve against Hostinger SONGS_DIR if it's a relative path from the JSON response
         if (rawUrl) { try { url = new URL(rawUrl, SONGS_DIR).href; } catch (e) {} }
         const fromName = rawUrl ? songFromFilename(rawUrl, SONGS_DIR) : null;
         const code = String(item.code ?? item.id ?? (fromName && fromName.code) ?? (index + 1)).trim();
@@ -2059,19 +2005,18 @@ async function shubExtract(blk) {
                     if (offline.autoCache) offline.write('data', 'library.json', JSON.stringify(list)).catch(() => {});
                     return { count: list.length, source: src, offline: false };
                 }
-            } catch (e) { console.warn('Song library source failed:', src, e); }
+            } catch (e) {}
         }
-        // Offline: use the song list saved during the last online session
         try {
             const f = await offline.read('data', 'library.json');
             if (f) {
                 const list = JSON.parse(await f.text());
                 if (Array.isArray(list) && list.length) { librarySongs = list; return { count: list.length, source: 'saved', offline: false, saved: true }; }
             }
-        } catch (e) { console.warn('Saved song list unreadable:', e); }
+        } catch (e) {}
         librarySongs = [
             { code: "000001", name: "Trust In Me", artistName: "Francesca Beghe", url: "https://maruyatvph.com/megaoke/songs/000001%20-%20Trust%20In%20Me%20-%20Francesca%20Beghe.mid" },
-            { code: "000004", name: "Pamela Wan", artistName: "Vhong Navarro", url: "https://maruyatvph.com/megaoke/songs/000004%20-%20Pamela%20Wan%20-%20Vhong%20Navarro.mid" }
+            { code: "000002", name: "Boom Boom Boom", artistName: "Venga Boys", url: "https://maruyatvph.com/megaoke/songs/000002%20-%20Boom%20Boom%20Boom%20-%20Venga%20Boys.mid" }
         ];
         return { count: librarySongs.length, source: 'offline', offline: true };
     }
@@ -2161,14 +2106,13 @@ async function shubExtract(blk) {
         setStep('sf', 'active', 'Connecting…', 2);
 
         const libTask = (async () => {
-            // Sources, in order: IDX archive (./idx) and the local MIDI folder (./songs/). The online list is only a fallback.
             setStep('lib', 'active', 'Reading IDX & songs/…', 40);
             const idxPromise = loadIdxLocal();
             idxPromise.catch((e) => { idxState.error = (e && e.message) || String(e); });
             const localSongsPromise = loadLocalSongsFolder().catch(() => []);
             let idxRes = null;
             try { idxRes = await Promise.race([idxPromise, new Promise((res) => setTimeout(() => res(null), 12000))]); }
-            catch (e) { console.warn('Local IDX not loaded:', e); }
+            catch (e) {}
             const localSongs = await localSongsPromise;
 
             if (idxRes || localSongs.length) {
@@ -2183,14 +2127,13 @@ async function shubExtract(blk) {
                 return;
             }
 
-            // No IDX (missing, or still downloading in whole-file mode): use the online list and merge IDX in when it arrives.
             const lib = await loadSongLibrary();
             idxPromise.then(async (res) => {
                 librarySongs = finalizeSongs(librarySongs.concat(res.songs));
                 await rebuildSongDatabase();
                 setStep('lib', 'ok', `${songDatabase.length.toLocaleString()} songs • IDX ${res.count.toLocaleString()}`, 100);
                 refreshEngineBadge();
-            }).catch((e) => console.warn('Local IDX not loaded:', e));
+            }).catch(() => {});
             await rebuildSongDatabase();
             bootState.lib = 100;
             const total = songDatabase.length, localN = songDatabase.filter(x => x.localFile).length;
@@ -2209,7 +2152,6 @@ async function shubExtract(blk) {
         };
         try { soundEngine.initContext(); }
         catch (err) {
-            console.error(err);
             bootState.noAudio = true;
             setStep('sf', 'err', 'Not available', 100);
             setStep('eng', 'err', 'Web Audio not supported', 100);
@@ -2230,7 +2172,7 @@ async function shubExtract(blk) {
             soundEngine.initContext();
             if (soundEngine.ctx.state === 'suspended') await soundEngine.ctx.resume();
             if (soundEngine.readyPromise) await Promise.race([soundEngine.readyPromise, new Promise(res => setTimeout(res, 20000))]);
-        } catch (err) { console.warn('Launch audio start failed:', err); }
+        } catch (err) {}
         refreshEngineBadge();
         soundEngine.applyAllChannelVolumes();
         soundEngine.playBeep(84);
@@ -2302,11 +2244,7 @@ async function shubExtract(blk) {
         if (!song) return;
         const requestToken = ++playToken;
         try { await soundEngine.ensureReady(); }
-        catch (audioError) {
-            console.error('Audio initialization failed:', audioError);
-            alert('Audio could not be initialized. Please tap the screen and try again.');
-            return;
-        }
+        catch (audioError) { return; }
         if (requestToken !== playToken) return;
         stopActivePlayback();
         const token = ++playToken;
@@ -2322,19 +2260,16 @@ async function shubExtract(blk) {
         updateQueueDisplay();
 
         let parsed = null;
-        // 0) local IDX archive (no network needed)
         if (idxHas(song.code)) {
             try { parsed = await parseMidiBuffer(await idxReadBuffer(song.code)); }
-            catch (e) { console.warn('IDX MIDI load failed', e); }
+            catch (e) { }
         }
-        // 1) copy stored in the offline "maruyaoke/midi" folder
         if ((!parsed || !parsed.notes.length) && song.localFile) {
             try {
                 const f = await offline.read('midi', song.localFile);
                 if (f) parsed = await parseMidiBuffer(await f.arrayBuffer());
-            } catch (e) { console.warn('Offline MIDI read failed', e); }
+            } catch (e) { }
         }
-        // 2) network (and keep a copy for next time)
         if ((!parsed || !parsed.notes.length) && song.url) {
             try {
                 const controller = new AbortController();
@@ -2344,9 +2279,9 @@ async function shubExtract(blk) {
                     if (!res.ok) throw new Error(`MIDI HTTP ${res.status}`);
                     const buf = await res.arrayBuffer();
                     parsed = await parseMidiBuffer(buf);
-                    if (parsed && parsed.notes.length && offline.autoCache && new URL(song.url, location.href).origin !== location.origin) saveSongOffline(song, buf); // local ./songs files are already on this server
+                    if (parsed && parsed.notes.length && offline.autoCache && new URL(song.url, location.href).origin !== location.origin) saveSongOffline(song, buf);
                 } finally { clearTimeout(timeout); }
-            } catch (e) { console.warn("MIDI load failed", e); }
+            } catch (e) { }
         }
         if (token !== playToken) return;
 
@@ -2358,7 +2293,6 @@ async function shubExtract(blk) {
             };
         }
 
-        // Show the lyrics right away (readable during the countdown), then 3-2-1-GO
         lyricsConductor.load(parsed);
         await scorer.ensureMic();
         scorer.startCalibration();
@@ -2386,7 +2320,6 @@ async function shubExtract(blk) {
         const notes = parsed.notes, offs = parsed.offs, ctrls = parsed.controls;
         let ni = 0, oi = 0, ci = 0;
 
-        // Audio scheduler: runs on a timer, independent from screen refresh.
         const pump = () => {
             if (token !== playToken || uiState !== "PLAYING" || isPaused) return;
             const tick = secToTick(parsed, clock.now());
@@ -2412,7 +2345,6 @@ async function shubExtract(blk) {
             if (tick >= parsed.totalTicks) stopAndScore();
         };
 
-        // Display loop: lyrics follow the same clock, delayed by the device audio latency + manual LYR offset.
         const draw = () => {
             if (token !== playToken) return;
             const delay = lyricOffsetMs / 1000 + soundEngine.outputLatency();
@@ -2445,7 +2377,7 @@ async function shubExtract(blk) {
     function togglePlayPause() {
         soundEngine.initContext();
         if (uiState === "PLAYING") {
-            if (!playbackStarted) return; // still in countdown
+            if (!playbackStarted) return; 
             isPaused = !isPaused;
             if (isPaused) { clock.pause(); soundEngine.allNotesOff(); }
             else clock.resume();
@@ -2508,14 +2440,14 @@ async function shubExtract(blk) {
                 this.ctx = soundEngine.ctx;
                 this.analyser = this.ctx.createAnalyser();
                 this.analyser.fftSize = 2048;
-                this.ctx.createMediaStreamSource(this.stream).connect(this.analyser); // not routed to speakers
+                this.ctx.createMediaStreamSource(this.stream).connect(this.analyser);
                 this.buf = new Float32Array(this.analyser.fftSize);
                 this.ready = true;
                 this.timer = setInterval(() => this.tick(), 30);
-            } catch (e) { console.warn('Microphone unavailable, scoring will be estimated', e); this.failed = true; }
+            } catch (e) { this.failed = true; }
             return this.ready;
         },
-        startCalibration() { this.cal = []; this.mode = 'cal'; },   // quiet room measurement during the 3-2-1 countdown
+        startCalibration() { this.cal = []; this.mode = 'cal'; }, 
         endCalibration() {
             const c = this.cal.slice().sort((a, b) => a - b);
             const ambient = c.length ? c[Math.floor(c.length * 0.9)] : 0.005;
@@ -2547,15 +2479,14 @@ async function shubExtract(blk) {
             const dt = this.lastT === null ? 0 : Math.min(0.1, Math.max(0, t - this.lastT));
             this.lastT = t;
             if (!dt) return;
-            // The singer follows what they HEAR, so compare against the song position minus output latency.
             const ts = t - (soundEngine.outputLatency() + 0.04) * soundEngine.tempoRate;
             const targets = [ts - 0.1, ts, ts + 0.06].map(x => this.noteAt(x)).filter(v => v !== null);
-            if (!targets.length) return;           // no melody here: neither rewarded nor penalised
+            if (!targets.length) return; 
             this.possible += dt;
-            if (r.rms < this.gate || r.clarity < 0.8 || r.freq < 70 || r.freq > 1200) return;  // silence / noise
+            if (r.rms < this.gate || r.clarity < 0.8 || r.freq < 70 || r.freq > 1200) return; 
             this.voiced += dt;
             const midi = 69 + 12 * Math.log2(r.freq / 440);
-            let best = 6;                           // octave-folded error: men/women may sing an octave apart
+            let best = 6; 
             for (const n of targets) best = Math.min(best, Math.abs(((midi - n + 6) % 12 + 12) % 12 - 6));
             this.earned += Math.max(0, Math.min(1, 1 - (best - 0.5) / 1.5)) * dt;
             if (best <= 0.5) this.onPitch += dt;
@@ -2591,7 +2522,7 @@ async function shubExtract(blk) {
         const scoreScreen = document.getElementById('screen-score');
         scoreScreen.classList.remove('hidden'); scoreScreen.classList.add('flex');
         const result = scorer.finish();
-        const scoreValue = result ? result.score : 70 + Math.floor(Math.random() * 16); // estimate if no mic / no melody
+        const scoreValue = result ? result.score : 70 + Math.floor(Math.random() * 16);
         document.getElementById('score-number').textContent = scoreValue;
         document.getElementById('score-msg').textContent =
             scoreValue <= 50 ? 'Try again next time' : scoreValue <= 75 ? 'Improve your singing' :
@@ -2622,9 +2553,8 @@ async function shubExtract(blk) {
             else v.requestPictureInPicture().catch(() => {});
         }
     }
-    // BGV: motion1 -> motion4 (local ./bgv/Motion first, hosted copy if the local file is missing), then the still image, then loops.
     const BGV_COUNT = 4;
-    let bgvIndex = 1; // 1..4 = motion videos, 0 = still image
+    let bgvIndex = 1;
     function bgvLoad(n) {
         const v = document.getElementById('bgv-video');
         const remote = `https://maruyatvph.com/megaoke/bgv/Motion/motion${n}.mp4`;
@@ -2647,7 +2577,7 @@ async function shubExtract(blk) {
         document.getElementById('val-key').textContent = keySemitones;
     }
     function adjustTempo(delta) {
-        clock.rebase(); // keep the song position continuous when the speed changes
+        clock.rebase();
         tempoSteps = Math.max(-6, Math.min(6, tempoSteps + delta));
         soundEngine.tempoRate = Math.max(0.5, 1.0 + (tempoSteps * 0.06));
         document.getElementById('val-tem').textContent = tempoSteps;
@@ -2658,7 +2588,6 @@ async function shubExtract(blk) {
         setVol('melody', lvls[(i + 1) % lvls.length]);
     }
     function toggleNorm() { setNormOn(!soundEngine.normEnabled); }
-    // + delays lyrics, - shows them earlier (50 ms steps)
     function adjustLyricSync(dir) {
         lyricOffsetMs = Math.max(-1000, Math.min(1000, lyricOffsetMs + dir * 50));
         document.getElementById('val-lyr').textContent = lyricOffsetMs;
@@ -2818,7 +2747,7 @@ async function shubExtract(blk) {
                 try { handleRemoteCommand(JSON.parse(payload.toString())); }
                 catch (err) { console.warn('Invalid remote command', err); }
             });
-        } catch (err) { console.warn('Remote receiver unavailable:', err); }
+        } catch (err) { }
     }
     function handleRemoteCommand(msg) {
         if (!msg || typeof msg.action !== 'string') return;
