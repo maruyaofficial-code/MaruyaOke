@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maruya IDX Repacker & SF2 Previewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex flex-col items-center py-10 px-4">
+
+    <div class="w-full max-w-4xl bg-gray-900 border border-amber-400/30 rounded-2xl p-6 shadow-2xl flex flex-col gap-6">
+        
+        <!-- HEADER -->
+        <div class="flex items-center justify-between border-b border-white/10 pb-4">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-b from-amber-400 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                    <i class="fas fa-shield-alt text-2xl text-black/80"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-tight text-white">Maruya IDX Repacker</h1>
+                    <p class="text-[10px] font-bold tracking-widest text-amber-400 uppercase">AES-256 Encrypted Compiler & SF2 Player</p>
+                </div>
+            </div>
+            <div id="sf2-status" class="bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs font-bold text-gray-400 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-gray-600" id="sf2-indicator"></span> SF2 Engine: Offline
+            </div>
+        </div>
+
+        <!-- ENGINE SETTINGS (SF2 IMPORT) -->
+        <div class="bg-black/40 border border-white/10 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-end">
+            <div class="flex-1 w-full">
+                <label class="text-xs font-bold text-gray-400 mb-1.5 block"><i class="fas fa-music mr-1.5 text-amber-400"></i>SoundFont (SF2) Import Link</label>
+                <input type="text" id="sf2-url-input" value="https://maruyatvph.com/megaoke/sound/soundfont.sf2" class="w-full bg-gray-950 border border-white/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 placeholder-gray-600" placeholder="https://...">
+            </div>
+            <button id="btn-load-sf2" class="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs rounded-lg transition-colors whitespace-nowrap shadow-lg">
+                LOAD ENGINE
+            </button>
+        </div>
+
+        <!-- INPUT ZONES -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <!-- URL Fetcher -->
+            <div class="bg-black/40 border border-white/10 rounded-xl p-5 flex flex-col justify-center">
+                <h3 class="text-sm font-bold text-white mb-3"><i class="fas fa-link mr-2 text-cyan-400"></i>Import MIDI from URL</h3>
+                <div class="flex gap-2">
+                    <input type="text" id="url-input" value="https://maruyatvph.com/megaoke/songs/000002 - Boom Boom Boom - Venga Boys.mid" class="flex-1 bg-gray-950 border border-white/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 placeholder-gray-600" placeholder="https://...">
+                    <button id="btn-fetch-url" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-lg transition-colors">
+                        FETCH
+                    </button>
+                </div>
+            </div>
+
+            <!-- File Drop Zone -->
+            <div id="drop-zone" class="bg-black/40 border border-dashed border-white/20 rounded-xl p-5 text-center transition hover:border-amber-400/60 flex flex-col items-center justify-center cursor-pointer">
+                <input type="file" id="file-input" multiple accept=".mid,.midi,.kar" class="hidden">
+                <i class="fas fa-file-audio text-2xl text-gray-500 mb-2"></i>
+                <h3 class="text-xs font-bold text-white mb-1">Select or drop MIDI files</h3>
+                <p class="text-[10px] text-gray-400">Format: 000001 - Title - Artist.mid</p>
+            </div>
+        </div>
+
+        <!-- QUEUE LIST -->
+        <div class="flex-1 bg-black/60 border border-white/10 rounded-xl p-4 flex flex-col min-h-[250px] max-h-[400px]">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-bold text-white"><i class="fas fa-list-ol mr-2 text-amber-400"></i>File Queue</h3>
+                <span id="queue-count" class="text-xs font-mono text-gray-400">0 files</span>
+            </div>
+            <div id="queue-container" class="flex-1 overflow-y-auto no-scrollbar space-y-2">
+                <div class="text-xs text-gray-500 text-center mt-10">Queue is empty. Add files to begin.</div>
+            </div>
+        </div>
+
+        <!-- ACTION & STATUS PANEL -->
+        <div class="flex flex-col gap-3">
+            <div id="status-panel" class="hidden">
+                <div class="flex justify-between text-xs font-bold text-gray-300 mb-1">
+                    <span id="status-text">Processing...</span>
+                    <span id="status-progress">0%</span>
+                </div>
+                <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div id="progress-bar" class="h-full bg-gradient-to-r from-amber-400 to-orange-500 w-0 transition-all duration-300"></div>
+                </div>
+            </div>
+
+            <button id="btn-build" class="w-full py-3.5 bg-gradient-to-b from-amber-500 to-amber-700 text-black font-extrabold text-sm rounded-xl shadow-lg hover:scale-[0.99] transition-transform opacity-50 cursor-not-allowed" disabled>
+                <i class="fas fa-box-open mr-2"></i> COMPILE SHUB ARCHIVE
+            </button>
+            <div id="download-actions" class="hidden flex gap-2">
+                <button id="btn-dl-idx" class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold text-xs rounded-xl transition-colors"><i class="fas fa-download mr-2"></i> Download shubidx</button>
+                <button id="btn-dl-blob" class="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold text-xs rounded-xl transition-colors"><i class="fas fa-download mr-2"></i> Download shubblob</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- MAIN SCRIPT (Module to support SpessaSynth) -->
+    <script type="module">
+        import { WorkletSynthesizer, Sequencer } from 'https://cdn.jsdelivr.net/npm/spessasynth_lib@4.4.0/+esm';
+
+        // -------------------------------------------------------------
+        // STATE & UI BINDINGS
+        // -------------------------------------------------------------
+        const queuedFiles = [];
+        let generatedBlob = null;
+        let generatedIdx = null;
+
+        const ui = {
+            sf2UrlInput: document.getElementById('sf2-url-input'),
+            btnLoadSf2: document.getElementById('btn-load-sf2'),
+            urlInput: document.getElementById('url-input'),
+            btnFetchUrl: document.getElementById('btn-fetch-url'),
+            fileInput: document.getElementById('file-input'),
+            dropZone: document.getElementById('drop-zone'),
+            queueContainer: document.getElementById('queue-container'),
+            queueCount: document.getElementById('queue-count'),
+            btnBuild: document.getElementById('btn-build'),
+            statusPanel: document.getElementById('status-panel'),
+            statusText: document.getElementById('status-text'),
+            statusProgress: document.getElementById('status-progress'),
+            progressBar: document.getElementById('progress-bar'),
+            dlActions: document.getElementById('download-actions'),
+            btnDlIdx: document.getElementById('btn-dl-idx'),
+            btnDlBlob: document.getElementById('btn-dl-blob'),
+            sf2Status: document.getElementById('sf2-status')
+        };
+
+        // -------------------------------------------------------------
+        // SF2 ENGINE (SpessaSynth)
+        // -------------------------------------------------------------
+        let audioCtx = null;
+        let synth = null;
+        let seq = null;
+        let sf2Loaded = false;
+        let currentSf2Url = '';
+        let currentlyPlayingIdx = -1;
+
+        async function initSF2(forceReload = false) {
+            const targetUrl = ui.sf2UrlInput.value.trim();
+            if (!targetUrl) return false;
+
+            // Skip reload if already loaded this exact URL and not forcing
+            if (sf2Loaded && currentSf2Url === targetUrl && !forceReload) return true;
+
+            try {
+                // Stop ongoing playback before swapping engine
+                if (seq) { seq.stop(); seq = null; currentlyPlayingIdx = -1; renderQueue(); }
+
+                ui.btnLoadSf2.disabled = true;
+                ui.btnLoadSf2.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i> LOADING...`;
+                ui.sf2Status.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Loading SF2...`;
+                
+                // Initialize audio context strictly once
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    await audioCtx.audioWorklet.addModule('https://cdn.jsdelivr.net/npm/spessasynth_lib@4.4.0/dist/spessasynth_processor.min.js');
+                }
+                
+                // Construct new synthesizer to wipe old soundbanks
+                synth = new WorkletSynthesizer(audioCtx);
+                const res = await fetch(targetUrl);
+                if (!res.ok) throw new Error("Failed to fetch soundfont: HTTP " + res.status);
+                const buf = await res.arrayBuffer();
+                await synth.soundBankManager.addSoundBank(buf, 'maruya');
+                await synth.isReady;
+                
+                sf2Loaded = true;
+                currentSf2Url = targetUrl;
+                ui.sf2Status.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> SF2 Ready`;
+                return true;
+            } catch (err) {
+                console.error("SF2 Engine Error:", err);
+                sf2Loaded = false;
+                currentSf2Url = '';
+                ui.sf2Status.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> SF2 Failed`;
+                alert("Could not load SF2 engine.\n" + err.message + "\n\nNote: Ensure CORS is enabled on the target server.");
+                return false;
+            } finally {
+                ui.btnLoadSf2.disabled = false;
+                ui.btnLoadSf2.innerHTML = `LOAD ENGINE`;
+            }
+        }
+
+        ui.btnLoadSf2.addEventListener('click', () => initSF2(true));
+
+        async function togglePreview(index) {
+            if (currentlyPlayingIdx === index && seq) {
+                seq.stop();
+                seq = null;
+                currentlyPlayingIdx = -1;
+                renderQueue();
+                return;
+            }
+
+            if (seq) seq.stop();
+
+            const ready = await initSF2();
+            if (!ready) return;
+
+            currentlyPlayingIdx = index;
+            renderQueue(); 
+
+            try {
+                if (audioCtx.state === 'suspended') await audioCtx.resume();
+                const arrayBuffer = await queuedFiles[index].arrayBuffer();
+                seq = new Sequencer([{ binary: new Uint8Array(arrayBuffer) }], synth);
+                seq.play();
+                
+                seq.onFinished = () => {
+                    currentlyPlayingIdx = -1;
+                    renderQueue();
+                };
+            } catch (err) {
+                console.error("Preview playback error", err);
+                currentlyPlayingIdx = -1;
+                renderQueue();
+            }
+        }
+
+        // -------------------------------------------------------------
+        // FILE QUEUE MANAGEMENT
+        // -------------------------------------------------------------
+        function addFiles(files) {
+            const validFiles = files.filter(f => /\.(mid|midi|kar)$/i.test(f.name));
+            if (!validFiles.length) return;
+            queuedFiles.push(...validFiles);
+            renderQueue();
+        }
+
+        function removeFile(index) {
+            if (currentlyPlayingIdx === index && seq) {
+                seq.stop();
+                seq = null;
+                currentlyPlayingIdx = -1;
+            }
+            queuedFiles.splice(index, 1);
+            if (currentlyPlayingIdx > index) currentlyPlayingIdx--;
+            renderQueue();
+        }
+
+        function renderQueue() {
+            ui.queueCount.textContent = `${queuedFiles.length} file${queuedFiles.length !== 1 ? 's' : ''}`;
+            
+            if (queuedFiles.length === 0) {
+                ui.queueContainer.innerHTML = `<div class="text-xs text-gray-500 text-center mt-10">Queue is empty. Add files to begin.</div>`;
+                ui.btnBuild.disabled = true;
+                ui.btnBuild.classList.add('opacity-50', 'cursor-not-allowed');
+                return;
+            }
+
+            ui.btnBuild.disabled = false;
+            ui.btnBuild.classList.remove('opacity-50', 'cursor-not-allowed');
+            ui.queueContainer.innerHTML = '';
+
+            queuedFiles.forEach((file, idx) => {
+                const match = file.name.match(/^(\d{1,6})\s*-\s*(.+?)\s*-\s*(.+?)\.(mid|midi|kar)$/i);
+                const code = match ? match[1].padStart(6, '0') : "NO CODE";
+                const title = match ? match[2].trim() : file.name;
+                const isPlaying = (currentlyPlayingIdx === idx);
+
+                const row = document.createElement('div');
+                row.className = `flex items-center justify-between p-2.5 rounded-lg border ${isPlaying ? 'bg-amber-900/30 border-amber-500/50' : 'bg-gray-900 border-white/10'}`;
+                
+                row.innerHTML = `
+                    <div class="flex-1 min-w-0 pr-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-mono font-black text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded">${code}</span>
+                            <span class="text-xs font-bold text-white truncate">${title}</span>
+                        </div>
+                        <div class="text-[10px] text-gray-400 truncate mt-0.5">${(file.size / 1024).toFixed(1)} KB</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="btn-preview w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isPlaying ? 'bg-red-500 hover:bg-red-400 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}" data-idx="${idx}" title="${isPlaying ? 'Stop' : 'Preview with SF2'}">
+                            <i class="fas ${isPlaying ? 'fa-stop' : 'fa-play ml-0.5'}"></i>
+                        </button>
+                        <button class="btn-remove w-8 h-8 rounded-full bg-gray-800 hover:bg-red-900/80 text-gray-400 hover:text-red-400 flex items-center justify-center transition-colors" data-idx="${idx}" title="Remove">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+                ui.queueContainer.appendChild(row);
+            });
+
+            document.querySelectorAll('.btn-preview').forEach(btn => {
+                btn.addEventListener('click', () => togglePreview(parseInt(btn.getAttribute('data-idx'))));
+            });
+            document.querySelectorAll('.btn-remove').forEach(btn => {
+                btn.addEventListener('click', () => removeFile(parseInt(btn.getAttribute('data-idx'))));
+            });
+        }
+
+        // -------------------------------------------------------------
+        // URL FETCHING
+        // -------------------------------------------------------------
+        ui.btnFetchUrl.addEventListener('click', async () => {
+            const url = ui.urlInput.value.trim();
+            if (!url) return;
+            
+            ui.btnFetchUrl.disabled = true;
+            ui.btnFetchUrl.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
+            
+            try {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const buf = await res.arrayBuffer();
+                
+                let filename = url.split('/').pop() || '000000 - Unknown - Artist.mid';
+                try { filename = decodeURIComponent(filename); } catch(e){}
+                
+                const file = new File([buf], filename, { type: 'audio/midi' });
+                addFiles([file]);
+                ui.urlInput.value = ''; 
+            } catch (err) {
+                alert("Failed to fetch URL: " + err.message + "\n\nNote: Make sure CORS allows this fetch.");
+            } finally {
+                ui.btnFetchUrl.disabled = false;
+                ui.btnFetchUrl.innerHTML = `FETCH`;
+            }
+        });
+
+        // -------------------------------------------------------------
+        // DRAG & DROP BINDINGS
+        // -------------------------------------------------------------
+        ui.dropZone.addEventListener('click', () => ui.fileInput.click());
+        ui.fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) addFiles(Array.from(e.target.files));
+            ui.fileInput.value = ''; 
+        });
+        ui.dropZone.addEventListener('dragover', (e) => { e.preventDefault(); ui.dropZone.classList.add('border-amber-400', 'bg-black/60'); });
+        ui.dropZone.addEventListener('dragleave', () => { ui.dropZone.classList.remove('border-amber-400', 'bg-black/60'); });
+        ui.dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            ui.dropZone.classList.remove('border-amber-400', 'bg-black/60');
+            if (e.dataTransfer.files.length) addFiles(Array.from(e.dataTransfer.files));
+        });
+
+        // -------------------------------------------------------------
+        // AES-CBC ENCRYPTION & IDX/BLOB COMPILER
+        // -------------------------------------------------------------
+        const HEX_KEY = 'b302d56b35890aa256e6f79ee2954c1b8682b1fcf28ca6e0409eb919eae23dea';
+        const HEX_IV = 'e4f8b2c9e1a7d6f530e4b8a2c9f1d3e5';
+        const hexToBytes = (h) => Uint8Array.from(h.match(/../g), (x) => parseInt(x, 16));
+        const toWin1252 = (str) => {
+            const u = new Uint8Array(str.length);
+            for(let i = 0; i < str.length; i++) u[i] = str.charCodeAt(i) > 255 ? 63 : str.charCodeAt(i); 
+            return u;
+        };
+
+        ui.btnBuild.addEventListener('click', async () => {
+            if (queuedFiles.length === 0) return;
+
+            if (seq) { seq.stop(); seq = null; currentlyPlayingIdx = -1; renderQueue(); }
+
+            ui.statusPanel.classList.remove('hidden');
+            ui.dlActions.classList.add('hidden');
+            ui.btnBuild.classList.add('hidden');
+            
+            const cryptoKey = await crypto.subtle.importKey('raw', hexToBytes(HEX_KEY), { name: 'AES-CBC' }, false, ['encrypt']);
+            const ivBytes = hexToBytes(HEX_IV);
+
+            const blobParts = [];
+            const singers = [];
+            const songs = [];
+            let currentPosSectors = 0;
+
+            for (let i = 0; i < queuedFiles.length; i++) {
+                const file = queuedFiles[i];
+                
+                const progressPct = Math.round((i / queuedFiles.length) * 100);
+                ui.statusText.textContent = `Encrypting: ${file.name}`;
+                ui.statusProgress.textContent = `${progressPct}%`;
+                ui.progressBar.style.width = `${progressPct}%`;
+
+                const match = file.name.match(/^(\d{1,6})\s*-\s*(.+?)\s*-\s*(.+?)\.(mid|midi|kar)$/i);
+                const code = match ? parseInt(match[1], 10) : (i + 1);
+                const title = match ? match[2].trim() : file.name.replace(/\.(mid|midi|kar)$/i, '');
+                const artist = match ? match[3].trim() : "Unknown";
+
+                let singerIdx = singers.indexOf(artist);
+                if (singerIdx === -1) { singerIdx = singers.length; singers.push(artist); }
+
+                const arrayBuffer = await file.arrayBuffer();
+                const midiUint8 = new Uint8Array(arrayBuffer);
+                const compressed = pako.deflateRaw(midiUint8);
+                const clen = compressed.length;
+                const origLen = midiUint8.length;
+
+                const padLen = (16 - (clen % 16)) % 16;
+                const plainPadded = new Uint8Array(clen + padLen);
+                plainPadded.set(compressed, 0);
+
+                const cipherBuf = await crypto.subtle.encrypt({ name: 'AES-CBC', iv: ivBytes }, cryptoKey, plainPadded);
+                const cipherFull = new Uint8Array(cipherBuf);
+                const cipherNoPad = cipherFull.subarray(0, cipherFull.length - 16); 
+
+                const header = new Uint8Array(13);
+                header[0] = 0x4d; header[1] = 0x4b; header[2] = 0x4d; header[3] = 0x44;
+                header[4] = 1;
+                header[5] = origLen & 0xff; header[6] = (origLen >> 8) & 0xff; header[7] = (origLen >> 16) & 0xff; header[8] = (origLen >> 24) & 0xff;
+                header[9] = clen & 0xff; header[10] = (clen >> 8) & 0xff; header[11] = (clen >> 16) & 0xff; header[12] = (clen >> 24) & 0xff;
+
+                const blockData = new Uint8Array(13 + cipherNoPad.length);
+                blockData.set(header, 0);
+                blockData.set(cipherNoPad, 13);
+
+                const sectors = Math.ceil(blockData.length / 2048);
+                const paddedSector = new Uint8Array(sectors * 2048);
+                paddedSector.set(blockData, 0);
+
+                blobParts.push(paddedSector);
+                songs.push({ code, title, singerIdx, pos: currentPosSectors, size: sectors });
+                currentPosSectors += sectors;
+            }
+
+            ui.statusText.textContent = "Compiling binary catalog (shubidx)...";
+            ui.statusProgress.textContent = "100%";
+            ui.progressBar.style.width = "100%";
+
+            const totalBlobLen = blobParts.reduce((acc, p) => acc + p.length, 0);
+            generatedBlob = new Uint8Array(totalBlobLen);
+            let offset = 0;
+            for (let p of blobParts) { generatedBlob.set(p, offset); offset += p.length; }
+
+            const idxParts = [];
+            idxParts.push(new Uint8Array(8608));
+
+            for (const s of singers) {
+                const textBytes = toWin1252(s.substring(0, 240));
+                const len = 5 + textBytes.length;
+                const rec = new Uint8Array(len);
+                rec[0] = 5; rec[1] = len;
+                rec.set(textBytes, 5);
+                idxParts.push(rec);
+            }
+
+            for (const s of songs) {
+                const textBytes = toWin1252(s.title.substring(0, 240));
+                const len = 12 + textBytes.length;
+                const rec = new Uint8Array(len);
+                rec[0] = 1; rec[1] = len;
+                rec[4] = s.singerIdx & 0xFF; rec[5] = (s.singerIdx >> 8) & 0xFF;
+                rec[6] = s.size & 0xFF; rec[7] = (s.size >> 8) & 0xFF;
+                rec[8] = s.pos & 0xFF; rec[9] = (s.pos >> 8) & 0xFF; rec[10] = (s.pos >> 16) & 0xFF; rec[11] = (s.pos >> 24) & 0xFF;
+                rec.set(textBytes, 12);
+                idxParts.push(rec);
+            }
+
+            for (const s of songs) {
+                const rec = new Uint8Array(4);
+                rec[0] = 9;
+                rec[1] = (s.code >> 16) & 0xFF; rec[2] = s.code & 0xFF; rec[3] = (s.code >> 8) & 0xFF;
+                idxParts.push(rec);
+            }
+
+            const totalIdxLen = idxParts.reduce((acc, p) => acc + p.length, 0);
+            generatedIdx = new Uint8Array(totalIdxLen);
+            let idxOffset = 0;
+            for (let p of idxParts) { generatedIdx.set(p, idxOffset); idxOffset += p.length; }
+
+            ui.statusText.textContent = "Packaging complete!";
+            ui.dlActions.classList.remove('hidden');
+            ui.btnBuild.classList.remove('hidden');
+            ui.btnBuild.innerHTML = `<i class="fas fa-redo mr-2"></i> RE-COMPILE`;
+        });
+
+        // -------------------------------------------------------------
+        // DOWNLOAD HANDLERS
+        // -------------------------------------------------------------
+        function triggerDownload(filename, data) {
+            const blob = new Blob([data], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        ui.btnDlIdx.addEventListener('click', () => { if (generatedIdx) triggerDownload('shubidx', generatedIdx); });
+        ui.btnDlBlob.addEventListener('click', () => { if (generatedBlob) triggerDownload('shubblob', generatedBlob); });
+
+    </script>
+</body>
+</html>
