@@ -37,8 +37,8 @@
         <!-- ENGINE SETTINGS (SF2 IMPORT) -->
         <div class="bg-black/40 border border-white/10 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-end">
             <div class="flex-1 w-full">
-                <label class="text-xs font-bold text-gray-400 mb-1.5 block"><i class="fas fa-music mr-1.5 text-amber-400"></i>SoundFont (SF2) Import Link</label>
-                <input type="text" id="sf2-url-input" value="https://maruyatvph.com/megaoke/sound/soundfont.sf2" class="w-full bg-gray-950 border border-white/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 placeholder-gray-600" placeholder="https://...">
+                <label class="text-xs font-bold text-gray-400 mb-1.5 block"><i class="fas fa-music mr-1.5 text-amber-400"></i>SoundFont (SF2) Location</label>
+                <input type="text" id="sf2-url-input" value="./sound/soundfont.sf2" class="w-full bg-gray-950 border border-white/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 placeholder-gray-600" placeholder="./sound/soundfont.sf2">
             </div>
             <button id="btn-load-sf2" class="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-black font-bold text-xs rounded-lg transition-colors whitespace-nowrap shadow-lg">
                 LOAD ENGINE
@@ -50,9 +50,9 @@
             
             <!-- URL Fetcher -->
             <div class="bg-black/40 border border-white/10 rounded-xl p-5 flex flex-col justify-center">
-                <h3 class="text-sm font-bold text-white mb-3"><i class="fas fa-link mr-2 text-cyan-400"></i>Import Single MIDI or Directory</h3>
+                <h3 class="text-sm font-bold text-white mb-3"><i class="fas fa-folder-open mr-2 text-cyan-400"></i>Import Songs Directory</h3>
                 <div class="flex gap-2">
-                    <input type="text" id="url-input" value="https://maruyatvph.com/megaoke/songs/" class="flex-1 bg-gray-950 border border-white/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 placeholder-gray-600" placeholder="https://...">
+                    <input type="text" id="url-input" value="./songs/" class="flex-1 bg-gray-950 border border-white/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 placeholder-gray-600" placeholder="./songs/">
                     <button id="btn-fetch-url" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-lg transition-colors">
                         FETCH
                     </button>
@@ -177,7 +177,7 @@
                 sf2Loaded = false;
                 currentSf2Url = '';
                 ui.sf2Status.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span> SF2 Failed`;
-                alert("Could not load SF2 engine.\n" + err.message + "\n\nNote: Ensure CORS is enabled on the target server.");
+                alert("Could not load SF2 engine.\n" + err.message + "\n\nNote: Check if the file exists at the specified path.");
                 return false;
             } finally {
                 ui.btnLoadSf2.disabled = false;
@@ -305,7 +305,6 @@
             try {
                 // Determine if fetching a single file or an entire directory index
                 if (/\.(mid|midi|kar)$/i.test(url)) {
-                    // --- Single File Mode ---
                     ui.btnFetchUrl.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
                     const res = await fetch(url);
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -318,20 +317,17 @@
                     addFiles([file]);
 
                 } else {
-                    // --- Bulk Directory Mode ---
                     ui.btnFetchUrl.innerHTML = `<i class="fas fa-spinner fa-spin"></i> SCANNING`;
                     const res = await fetch(url);
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const html = await res.text();
 
-                    // Parse standard Apache/Nginx directory listing HTML for .mid links
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(html, 'text/html');
                     const links = Array.from(doc.querySelectorAll('a'))
                                        .map(a => a.getAttribute('href'))
                                        .filter(href => href && /\.(mid|midi|kar)$/i.test(href));
                     
-                    // Fallback Regex if DOMParser misses
                     if (links.length === 0) {
                         const regexLinks = Array.from(html.matchAll(/href\s*=\s*["']([^"']+\.(?:mid|midi|kar))["']/gi)).map(m => m[1]);
                         if (regexLinks.length > 0) links.push(...regexLinks);
@@ -339,7 +335,15 @@
                     }
 
                     const uniqueLinks = [...new Set(links)];
-                    const baseUrl = url.endsWith('/') ? url : url + '/';
+                    
+                    // Create base URL relative to current page if path is relative
+                    let baseUrl;
+                    try {
+                        baseUrl = new URL(url, window.location.href).href;
+                        if (!baseUrl.endsWith('/')) baseUrl += '/';
+                    } catch (e) {
+                        baseUrl = url;
+                    }
                     
                     const fetchedFiles = [];
                     for (let i = 0; i < uniqueLinks.length; i++) {
@@ -369,7 +373,7 @@
                 
                 ui.urlInput.value = ''; 
             } catch (err) {
-                alert("Failed to fetch URL: " + err.message + "\n\nNote: Ensure CORS is enabled if fetching from a different domain.");
+                alert("Failed to fetch: " + err.message + "\n\nEnsure Options +Indexes is enabled in .htaccess in the songs folder.");
             } finally {
                 ui.btnFetchUrl.disabled = false;
                 ui.btnFetchUrl.innerHTML = `FETCH`;
