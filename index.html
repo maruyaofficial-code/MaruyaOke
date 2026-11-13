@@ -125,7 +125,7 @@
 
     <!-- DISPLAY STAGE (BGV + LYRICS) -->
     <div id="display-stage" class="relative w-full flex-1 overflow-hidden bg-[#1a2e40]">
-        <video id="bgv-video" src="./bgv/Motion/motion1.mp4" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover z-0">
+        <video id="bgv-video" src="https://maruyatvph.com/megaoke/bgv/Motion/motion1.mp4" autoplay loop muted playsinline class="absolute inset-0 w-full h-full object-cover z-0">
             </video>
         <img id="bgv-image" src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1000&q=80" alt="BG" class="absolute inset-0 w-full h-full object-cover z-0 hidden">
 
@@ -417,10 +417,11 @@
 <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 <script>
     // ---------- Sources ----------
-    const REMOTE_BASE      = "https://maruyatvph.com/megaoke/raw/";
-    const SONG_LIBRARY_URL = REMOTE_BASE;
-    const SONG_LIBRARY_FALLBACK_URL = "https://maruyatvph.com/megaoke/api/";
-    const SOUNDFONT_URL    = "https://maruyatvph.com/megaoke/sound/soundfont.sf2";
+    const HOSTINGER_BASE   = "https://maruyatvph.com/megaoke/";
+    const SONG_LIBRARY_URL = HOSTINGER_BASE + "api/index.php"; // Direct to Backend API
+    const SOUNDFONT_URL    = HOSTINGER_BASE + "sound/soundfont.sf2";
+    const SONGS_DIR        = HOSTINGER_BASE + "songs/";
+    const VOICE_DIR        = HOSTINGER_BASE + "voice/";
 
     window.addEventListener('load', () => {
         try { preloadVoicePrompts(); } catch (err) { console.warn('Voice prompt preload skipped:', err); }
@@ -455,7 +456,7 @@
     const voiceAudioCache = new Map();
     const voiceBlobUrls = new Map(); // file -> blob: URL from the offline folder
     function getVoiceAudio(file) {
-        const url = voiceBlobUrls.get(file) || new URL(file, REMOTE_BASE).href;
+        const url = voiceBlobUrls.get(file) || new URL(file, VOICE_DIR).href;
         if (!voiceAudioCache.has(url)) {
             const audio = new Audio(url);
             audio.preload = 'auto';
@@ -472,7 +473,7 @@
             try {
                 let blob = await offline.read('voice', file);
                 if (!blob) {
-                    const r = await fetch(new URL(file, REMOTE_BASE).href, { mode: 'cors' });
+                    const r = await fetch(new URL(file, VOICE_DIR).href, { mode: 'cors' });
                     if (!r.ok) throw new Error('HTTP ' + r.status);
                     blob = await r.blob();
                     if (offline.autoCache) offline.write('voice', file, blob).catch(() => {});
@@ -513,8 +514,6 @@
 
     // =====================================================================
     //  SOUND ENGINE
-    //  - noteOn() returns the actual (transposed) key so that noteOff() always
-    //    releases the right note, even if KEY changes while it is sounding.
     // =====================================================================
     const OUTPUT_BOOST = 2.6; // fixed makeup gain applied to all music output
     class MaruyaSoundEngine {
@@ -638,37 +637,7 @@
             const MAX_AGE = 24 * 60 * 60 * 1000;
             let cache = null;
 
-            // 0) ./sound/soundfont.sf2 next to index.html: 24 h cache, then the server, then a stale copy if offline
-            const localSfKey = assetKey('./sound/soundfont.sf2');
-            const sfHit = await assetCacheGet(localSfKey);
-            if (sfHit) {
-                try { const cb = await sfHit.arrayBuffer(); if (cb.byteLength > 1024) { onBytes(cb.byteLength, cb.byteLength); return cb; } } catch (e) {}
-            }
-            try {
-                const lr = await fetch('./sound/soundfont.sf2', { cache: 'no-store' });
-                const ct = lr.headers.get('Content-Type') || '';
-                if (lr.ok && !/text\/html/i.test(ct)) {
-                    const total = parseInt(lr.headers.get('Content-Length'), 10) || 0;
-                    let lbuf;
-                    if (lr.body && lr.body.getReader) {
-                        const rd = lr.body.getReader(), parts = []; let got = 0;
-                        onBytes(0, total);
-                        for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; onBytes(got, total); }
-                        const o = new Uint8Array(got); let off = 0; for (const c of parts) { o.set(c, off); off += c.length; }
-                        lbuf = o.buffer;
-                    } else lbuf = await lr.arrayBuffer();
-                    if (lbuf.byteLength > 1024) {
-                        await assetCachePut(localSfKey, lbuf); // awaited before the synth may detach the buffer
-                        onBytes(lbuf.byteLength, lbuf.byteLength); return lbuf;
-                    }
-                }
-            } catch (e) { console.warn('Local ./sound/soundfont.sf2 unavailable:', e); }
-            const sfStale = await assetCacheGet(localSfKey, true);
-            if (sfStale) {
-                try { const cb = await sfStale.arrayBuffer(); if (cb.byteLength > 1024) { onBytes(cb.byteLength, cb.byteLength); return cb; } } catch (e) {}
-            }
-
-            // 1) SoundFont stored in the offline "maruyaoke/sf2" folder (no expiry, works offline)
+            // 0) SoundFont stored in the offline "maruyaoke/sf2" folder (no expiry, works offline)
             try {
                 await offline.ready;
                 const local = await offline.pickSoundFont();
@@ -748,8 +717,6 @@
             refreshEngineBadge();
             try {
                 // Local vendor files first (offline), CDN only as an online fallback.
-                // spessasynth_lib.mjs imports the bare name "spessasynth_core"; map it to ./vendor/spessasynth_core.mjs
-                // when that file exists, otherwise to the CDN copy (must be registered before the first import).
                 const ensureCoreMap = async () => {
                     if (window.__coreMapDone) return; window.__coreMapDone = true;
                     let target = 'https://cdn.jsdelivr.net/npm/spessasynth_core@4/+esm';
@@ -1774,8 +1741,7 @@
     }
 
     // =====================================================================
-    //  IDX ARCHIVE  -  ./idx/shubidx (catalog) + ./idx/shubblob (songs), read from the local folder.
-    //  The two files must come from the same library set. Songs are decrypted only when played.
+    //  IDX ARCHIVE
     // =====================================================================
     const CODE_LENGTH = 6;
     const SECTOR = 2048;
@@ -1874,7 +1840,7 @@ async function aesCbcNoPad(k, data) {
     return new Uint8Array(await sub.decrypt({ name: 'AES-CBC', iv: k.iv }, k.ck, full));
 }
 
-const isMthd = (u) => u.length >= 4 && u[0] === 0x4d && u[1] === 0x54 && u[2] === 0x68 && u[3] === 0x64;
+const isMthd = (u) => u.length >= 4 && u[0] === 0x4d && u[1] === 0x54 && u[2] === 0x68 && u[3] === 0x44;
 
 /** Block bytes -> MIDI bytes. Block: "MKMD", version 1, u32 midi length, u32 deflated length, AES data. */
 async function shubExtract(blk) {
@@ -1897,8 +1863,8 @@ async function shubExtract(blk) {
 }
 
 
-    const IDX_URL_INDEX = './idx/shubidx';
-    const IDX_URL_BLOB = './idx/shubblob';
+    const IDX_URL_INDEX = HOSTINGER_BASE + 'idx/shubidx';
+    const IDX_URL_BLOB = HOSTINGER_BASE + 'idx/shubblob';
     // mode 'range': songs are read straight from the server with HTTP Range requests (tiny memory use).
     // mode 'blob' : the whole file was downloaded (server without Range support).
     const idxState = { mode: '', ver: '', blob: null, size: 0, entries: new Map(), songs: [], error: '', loading: false };
@@ -1938,7 +1904,7 @@ async function shubExtract(blk) {
         const hit = await assetCacheGet(key); // fresh (< 24 h) copy
         if (hit) { try { const hb = await hit.blob(); if (hb.size) return hb; } catch (e) {} }
         try {
-            const res = await fetch(url, { cache: 'no-store' });
+            const res = await fetch(url, { mode: 'cors', cache: 'no-store' });
             if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
             if (/text\/html/i.test(res.headers.get('Content-Type') || '')) throw new Error(`${url}: not found (server returned a web page)`);
             const blob = await res.blob();
@@ -1955,7 +1921,7 @@ async function shubExtract(blk) {
     /** Size + version tag of shubblob without downloading it ({size: 0} if unknown). */
     async function idxBlobSize() {
         try {
-            const r = await fetch(IDX_URL_BLOB, { method: 'HEAD', cache: 'no-store' });
+            const r = await fetch(IDX_URL_BLOB, { method: 'HEAD', mode: 'cors', cache: 'no-store' });
             if (!r.ok || /text\/html/i.test(r.headers.get('Content-Type') || '')) throw new Error('HTTP ' + r.status);
             const size = parseInt(r.headers.get('Content-Length'), 10) || 0;
             const meta = { size, ver: `${size}-${r.headers.get('ETag') || r.headers.get('Last-Modified') || ''}` };
@@ -2006,7 +1972,7 @@ async function shubExtract(blk) {
     // ---------- Song library ----------
     // Local MIDI folder: ./songs/ (directory listing, or a songs/index.json list).
     async function loadLocalSongsFolder() {
-        for (const src of ['./songs/index.json', './songs/']) {
+        for (const src of [HOSTINGER_BASE + 'songs/index.json', HOSTINGER_BASE + 'songs/']) {
             try {
                 const list = (await fetchSongList(src)).filter(x => x && x.url);
                 if (list.length) return list;
@@ -2035,8 +2001,9 @@ async function shubExtract(blk) {
     function normalizeJsonSong(item, dir, index) {
         const rawUrl = item.url || item.file || item.filename || item.path || '';
         let url = '';
-        if (rawUrl) { try { url = new URL(rawUrl, dir).href; } catch (e) {} }
-        const fromName = rawUrl ? songFromFilename(rawUrl, dir) : null;
+        // Explicitly resolve against Hostinger SONGS_DIR if it's a relative path from the JSON response
+        if (rawUrl) { try { url = new URL(rawUrl, SONGS_DIR).href; } catch (e) {} }
+        const fromName = rawUrl ? songFromFilename(rawUrl, SONGS_DIR) : null;
         const code = String(item.code ?? item.id ?? (fromName && fromName.code) ?? (index + 1)).trim();
         return {
             ...item, code,
@@ -2050,7 +2017,7 @@ async function shubExtract(blk) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
         let res;
-        try { res = await fetch(src, { cache: 'no-store', signal: controller.signal }); }
+        try { res = await fetch(src, { mode: 'cors', cache: 'no-store', signal: controller.signal }); }
         finally { clearTimeout(timeout); }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
@@ -2084,7 +2051,7 @@ async function shubExtract(blk) {
     }
 
     async function loadSongLibrary() {
-        for (const src of [SONG_LIBRARY_URL, SONG_LIBRARY_FALLBACK_URL]) {
+        for (const src of [SONG_LIBRARY_URL]) {
             try {
                 const list = finalizeSongs(await fetchSongList(src));
                 if (list.length) {
@@ -2660,13 +2627,8 @@ async function shubExtract(blk) {
     let bgvIndex = 1; // 1..4 = motion videos, 0 = still image
     function bgvLoad(n) {
         const v = document.getElementById('bgv-video');
-        const local = `./bgv/Motion/motion${n}.mp4`, remote = `https://maruyatvph.com/megaoke/bgv/Motion/motion${n}.mp4`;
-        let triedRemote = false;
-        v.onerror = () => {
-            if (triedRemote) { v.onerror = null; return; }
-            triedRemote = true; v.src = remote; v.play().catch(() => {});
-        };
-        v.src = local;
+        const remote = `https://maruyatvph.com/megaoke/bgv/Motion/motion${n}.mp4`;
+        v.src = remote;
         v.play().catch(() => {});
     }
     function cycleBackground() {
